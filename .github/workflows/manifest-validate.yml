@@ -1,0 +1,23 @@
+name: Manifest Sync & Validation
+
+on:
+  push:
+    branches: [main, production, staging, testing]
+  pull_request:
+    branches: [main, production, staging, testing]
+
+jobs:
+  validate-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+      - name: Validate Production Overlay
+        run: kustomize build overlays/production | kubectl apply --dry-run=client -f -
+      - name: Validate Staging Overlay
+        run: kustomize build overlays/staging-env | kubectl apply --dry-run=client -f -
+      - name: Validate Testing Overlay
+        run: kustomize build overlays/testing-env | kubectl apply --dry-run=client -f -
