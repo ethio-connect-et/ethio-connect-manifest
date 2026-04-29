@@ -1,4 +1,2 @@
 # Directory for Helm charts and Kustomize overlays supporting multi-cluster deployment
-charts/
-overlays/
 README.md

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: central-hub
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: central-hub
+  template:
+    metadata:
+      labels:
+        app: central-hub
+    spec:
+      containers:
+        - name: central-hub
+          image: ghcr.io/ethioconnect/central-hub:latest
+          ports:
+            - containerPort: 3000

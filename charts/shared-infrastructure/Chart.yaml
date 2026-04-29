@@ -1,0 +1,4 @@
+apiVersion: v2
+name: shared-infrastructure
+version: 0.1.0
+description: Helm chart for shared infrastructure (Keycloak, PostgreSQL, Redis)

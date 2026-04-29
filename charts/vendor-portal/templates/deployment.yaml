@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vendor-portal
+  template:
+    metadata:
+      labels:
+        app: vendor-portal
+    spec:
+      containers:
+        - name: vendor-portal
+          image: ghcr.io/ethioconnect/vendor-portal:latest
+          ports:
+            - containerPort: 3000

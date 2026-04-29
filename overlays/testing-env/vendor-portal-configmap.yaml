@@ -1,0 +1,10 @@
+# Example environment variables for testing
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vendor-portal-env
+  labels:
+    app: vendor-portal
+data:
+  NODE_ENV: "testing"
+  API_URL: "https://api-test.vendor-portal.ethio-connect.com"

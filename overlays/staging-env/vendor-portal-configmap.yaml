@@ -1,0 +1,10 @@
+# Example environment variables for staging
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vendor-portal-env
+  labels:
+    app: vendor-portal
+data:
+  NODE_ENV: "staging"
+  API_URL: "https://api-staging.vendor-portal.ethio-connect.com"

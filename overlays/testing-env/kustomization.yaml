@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../charts/vendor-portal/templates/deployment.yaml
+  - ../../charts/vendor-portal/templates/service.yaml
+  - ../../charts/customer-portal/templates/deployment.yaml
+  - ../../charts/customer-portal/templates/service.yaml
+  - ../../charts/central-hub/templates/deployment.yaml
+  - ../../charts/central-hub/templates/service.yaml
+  - ../../charts/shared-infrastructure/templates/deployments.yaml
+  - ../../charts/shared-infrastructure/templates/services.yaml
+patches:
+  - path: patch-testing-env.yaml

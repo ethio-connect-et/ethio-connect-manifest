@@ -1,0 +1,24 @@
+# Patch for production: set resource limits and use LoadBalancer service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal
+spec:
+  template:
+    spec:
+      containers:
+        - name: vendor-portal
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vendor-portal
+spec:
+  type: LoadBalancer

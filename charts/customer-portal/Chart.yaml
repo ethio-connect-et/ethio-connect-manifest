@@ -1,0 +1,4 @@
+apiVersion: v2
+name: customer-portal
+version: 0.1.0
+description: Helm chart for Customer Portal

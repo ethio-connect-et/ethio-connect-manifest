@@ -1,0 +1,4 @@
+apiVersion: v2
+name: central-hub
+version: 0.1.0
+description: Helm chart for Central Hub

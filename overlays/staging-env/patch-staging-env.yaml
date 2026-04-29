@@ -1,0 +1,18 @@
+# Patch for staging environment: use staging image tags and moderate resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal
+spec:
+  template:
+    spec:
+      containers:
+        - name: vendor-portal
+          image: ghcr.io/ethioconnect/vendor-portal:staging
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
