@@ -1,19 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: central-hub
+  name: central-hub-api
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: central-hub
+      runtime: api
   template:
     metadata:
       labels:
         app: central-hub
+        runtime: api
     spec:
       containers:
-        - name: central-hub
-          image: ghcr.io/ethioconnect/central-hub:latest
+        - name: central-hub-api
+          image: {{ .Values.images.api.repository }}{{ if .Values.images.api.digest }}@{{ .Values.images.api.digest }}{{ else }}:{{ .Values.images.api.tag }}{{ end }}
+          ports:
+            - containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: central-hub-dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: central-hub
+      runtime: web
+  template:
+    metadata:
+      labels:
+        app: central-hub
+        runtime: web
+    spec:
+      containers:
+        - name: central-hub-dashboard
+          image: {{ .Values.images.dashboard.repository }}{{ if .Values.images.dashboard.digest }}@{{ .Values.images.dashboard.digest }}{{ else }}:{{ .Values.images.dashboard.tag }}{{ end }}
           ports:
             - containerPort: 3000

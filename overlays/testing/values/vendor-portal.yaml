@@ -1,0 +1,4 @@
+images:
+  api: { tag: testing }
+  dashboard: { tag: testing }
+  publicDashboard: { tag: testing }
