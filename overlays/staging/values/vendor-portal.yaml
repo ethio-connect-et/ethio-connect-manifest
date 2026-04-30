@@ -1,0 +1,4 @@
+images:
+  api: { tag: staging }
+  dashboard: { tag: staging }
+  publicDashboard: { tag: staging }

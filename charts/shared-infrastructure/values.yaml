@@ -1,0 +1,13 @@
+images:
+  keycloak:
+    repository: quay.io/keycloak/keycloak
+    tag: "25.0.6"
+    digest: ""
+  postgres:
+    repository: postgres
+    tag: "15.8"
+    digest: ""
+  redis:
+    repository: redis
+    tag: "7.4.2"
+    digest: ""
