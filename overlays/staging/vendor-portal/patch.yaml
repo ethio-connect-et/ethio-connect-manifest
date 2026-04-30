@@ -1,10 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vendor-portal
+  name: vendor-portal-api
 spec:
   template:
     spec:
       containers:
-        - name: vendor-portal
-          image: ghcr.io/ethioconnect/vendor-portal@sha256:1111111111111111111111111111111111111111111111111111111111111111
+        - name: vendor-portal-api
+          image: ghcr.io/ethioconnect/vendor-portal-api@sha256:1111111111111111111111111111111111111111111111111111111111111111
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal-dashboard
+spec:
+  template:
+    spec:
+      containers:
+        - name: vendor-portal-dashboard
+          image: ghcr.io/ethioconnect/vendor-portal-dashboard@sha256:1111111111111111111111111111111111111111111111111111111111111111
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal-public-dashboard
+spec:
+  template:
+    spec:
+      containers:
+        - name: vendor-portal-public-dashboard
+          image: ghcr.io/ethioconnect/vendor-portal-public-dashboard@sha256:1111111111111111111111111111111111111111111111111111111111111111
