@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: central-hub-api
-          image: ghcr.io/ethioconnect/central-hub-api:latest
+          image: {{ .Values.images.api.repository }}{{ if .Values.images.api.digest }}@{{ .Values.images.api.digest }}{{ else }}:{{ .Values.images.api.tag }}{{ end }}
           ports:
             - containerPort: 3000
 ---
@@ -38,6 +38,6 @@ spec:
     spec:
       containers:
         - name: central-hub-dashboard
-          image: ghcr.io/ethioconnect/central-hub-dashboard:latest
+          image: {{ .Values.images.dashboard.repository }}{{ if .Values.images.dashboard.digest }}@{{ .Values.images.dashboard.digest }}{{ else }}:{{ .Values.images.dashboard.tag }}{{ end }}
           ports:
             - containerPort: 3000

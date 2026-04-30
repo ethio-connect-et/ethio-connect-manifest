@@ -17,9 +17,17 @@ jobs:
       - uses: imranismail/setup-kustomize@v2
       - name: Kustomize build checks
         run: |
-          kustomize build overlays/testing >/tmp/testing.yaml
-          kustomize build overlays/staging >/tmp/staging.yaml
-          kustomize build overlays/production >/tmp/production.yaml
+          kustomize build --enable-helm overlays/testing >/tmp/testing.yaml
+          kustomize build --enable-helm overlays/staging >/tmp/staging.yaml
+          kustomize build --enable-helm overlays/production >/tmp/production.yaml
+
+
+      - name: Enforce immutable/non-latest images
+        run: |
+          if rg -n 'image:\s+\S+:latest(\s|$)' /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; then
+            echo "Found forbidden :latest image tags in rendered manifests" >&2
+            exit 1
+          fi
 
       - name: Install Helm
         uses: azure/setup-helm@v4

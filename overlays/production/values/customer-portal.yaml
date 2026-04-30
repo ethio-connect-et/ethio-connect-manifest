@@ -1,0 +1,3 @@
+images:
+  api: { tag: "1.0.0" }
+  dashboard: { tag: "1.0.0" }

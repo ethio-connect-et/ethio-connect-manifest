@@ -1,0 +1,13 @@
+images:
+  api:
+    repository: ghcr.io/ethioconnect/vendor-portal-api
+    tag: main
+    digest: ""
+  dashboard:
+    repository: ghcr.io/ethioconnect/vendor-portal-dashboard
+    tag: main
+    digest: ""
+  publicDashboard:
+    repository: ghcr.io/ethioconnect/vendor-portal-public-dashboard
+    tag: main
+    digest: ""
