@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: vendor-portal-api
-          image: ghcr.io/ethioconnect/vendor-portal-api:latest
+          image: {{ .Values.images.api.repository }}{{ if .Values.images.api.digest }}@{{ .Values.images.api.digest }}{{ else }}:{{ .Values.images.api.tag }}{{ end }}
           ports:
             - containerPort: 3000
 ---
@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
         - name: vendor-portal-dashboard
-          image: ghcr.io/ethioconnect/vendor-portal-dashboard:latest
+          image: {{ .Values.images.dashboard.repository }}{{ if .Values.images.dashboard.digest }}@{{ .Values.images.dashboard.digest }}{{ else }}:{{ .Values.images.dashboard.tag }}{{ end }}
           ports:
             - containerPort: 3000
 ---
@@ -60,6 +60,6 @@ spec:
     spec:
       containers:
         - name: vendor-portal-public-dashboard
-          image: ghcr.io/ethioconnect/vendor-portal-public-dashboard:latest
+          image: {{ .Values.images.publicDashboard.repository }}{{ if .Values.images.publicDashboard.digest }}@{{ .Values.images.publicDashboard.digest }}{{ else }}:{{ .Values.images.publicDashboard.tag }}{{ end }}
           ports:
             - containerPort: 3000
