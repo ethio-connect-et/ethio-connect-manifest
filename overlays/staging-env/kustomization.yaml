@@ -1,13 +1,21 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-resources:
-  - ../../charts/vendor-portal/templates/deployment.yaml
-  - ../../charts/vendor-portal/templates/service.yaml
-  - ../../charts/customer-portal/templates/deployment.yaml
-  - ../../charts/customer-portal/templates/service.yaml
-  - ../../charts/central-hub/templates/deployment.yaml
-  - ../../charts/central-hub/templates/service.yaml
-  - ../../charts/shared-infrastructure/templates/deployments.yaml
-  - ../../charts/shared-infrastructure/templates/services.yaml
+helmCharts:
+  - name: vendor-portal
+    path: ../../charts/vendor-portal
+    releaseName: vendor-portal
+    valuesFile: values/vendor-portal.yaml
+  - name: customer-portal
+    path: ../../charts/customer-portal
+    releaseName: customer-portal
+    valuesFile: values/customer-portal.yaml
+  - name: central-hub
+    path: ../../charts/central-hub
+    releaseName: central-hub
+    valuesFile: values/central-hub.yaml
+  - name: shared-infrastructure
+    path: ../../charts/shared-infrastructure
+    releaseName: shared-infrastructure
+    valuesFile: values/shared-infrastructure.yaml
 patches:
   - path: patch-staging-env.yaml

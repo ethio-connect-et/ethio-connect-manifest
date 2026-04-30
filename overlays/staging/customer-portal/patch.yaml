@@ -1,10 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: customer-portal
+  name: customer-portal-api
 spec:
   template:
     spec:
       containers:
-        - name: customer-portal
-          image: ghcr.io/ethioconnect/customer-portal@sha256:2222222222222222222222222222222222222222222222222222222222222222
+        - name: customer-portal-api
+          image: ghcr.io/ethioconnect/customer-portal-api@sha256:2222222222222222222222222222222222222222222222222222222222222222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-portal-dashboard
+spec:
+  template:
+    spec:
+      containers:
+        - name: customer-portal-dashboard
+          image: ghcr.io/ethioconnect/customer-portal-dashboard@sha256:2222222222222222222222222222222222222222222222222222222222222222
