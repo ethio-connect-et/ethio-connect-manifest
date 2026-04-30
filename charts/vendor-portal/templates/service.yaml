@@ -1,10 +1,37 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: vendor-portal
+  name: vendor-portal-api
 spec:
   selector:
     app: vendor-portal
+    runtime: api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vendor-portal-web
+spec:
+  selector:
+    app: vendor-portal
+    runtime: web
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vendor-portal-public-web
+spec:
+  selector:
+    app: vendor-portal
+    runtime: public-web
   ports:
     - protocol: TCP
       port: 80

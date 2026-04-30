@@ -1,19 +1,65 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vendor-portal
+  name: vendor-portal-api
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: vendor-portal
+      runtime: api
   template:
     metadata:
       labels:
         app: vendor-portal
+        runtime: api
     spec:
       containers:
-        - name: vendor-portal
-          image: ghcr.io/ethioconnect/vendor-portal:latest
+        - name: vendor-portal-api
+          image: ghcr.io/ethioconnect/vendor-portal-api:latest
+          ports:
+            - containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal-dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vendor-portal
+      runtime: web
+  template:
+    metadata:
+      labels:
+        app: vendor-portal
+        runtime: web
+    spec:
+      containers:
+        - name: vendor-portal-dashboard
+          image: ghcr.io/ethioconnect/vendor-portal-dashboard:latest
+          ports:
+            - containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal-public-dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vendor-portal
+      runtime: public-web
+  template:
+    metadata:
+      labels:
+        app: vendor-portal
+        runtime: public-web
+    spec:
+      containers:
+        - name: vendor-portal-public-dashboard
+          image: ghcr.io/ethioconnect/vendor-portal-public-dashboard:latest
           ports:
             - containerPort: 3000
