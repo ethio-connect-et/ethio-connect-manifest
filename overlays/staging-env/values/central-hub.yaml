@@ -1,0 +1,3 @@
+images:
+  api: { tag: staging }
+  dashboard: { tag: staging }
