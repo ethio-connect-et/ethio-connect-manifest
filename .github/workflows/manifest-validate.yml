@@ -1,23 +1,45 @@
-name: Manifest Sync & Validation
+name: Manifest Validation
 
 on:
-  push:
-    branches: [main, production, staging, testing]
   pull_request:
-    branches: [main, production, staging, testing]
+    branches: [testing, staging, production]
+  push:
+    branches: [testing, staging, production]
 
 jobs:
-  validate-manifests:
+  validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v3
-      - name: Install Kustomize
+      - uses: actions/checkout@v4
+
+      - uses: imranismail/setup-kustomize@v2
+      - name: Kustomize build checks
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-      - name: Validate Production Overlay
-        run: kustomize build overlays/production | kubectl apply --dry-run=client -f -
-      - name: Validate Staging Overlay
-        run: kustomize build overlays/staging-env | kubectl apply --dry-run=client -f -
-      - name: Validate Testing Overlay
-        run: kustomize build overlays/testing-env | kubectl apply --dry-run=client -f -
+          kustomize build overlays/testing >/tmp/testing.yaml
+          kustomize build overlays/staging >/tmp/staging.yaml
+          kustomize build overlays/production >/tmp/production.yaml
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+      - name: Helm lint checks
+        run: |
+          helm lint charts/vendor-portal
+          helm lint charts/customer-portal
+          helm lint charts/central-hub
+          helm lint charts/shared-infrastructure
+
+      - name: Schema validation (kubeconform)
+        run: |
+          curl -sSL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo mv kubeconform /usr/local/bin/kubeconform
+          kubeconform -strict -summary /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml
+
+      - name: Policy checks (conftest)
+        run: |
+          curl -sSL -o conftest.tar.gz https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_$(uname -s)_$(uname -m).tar.gz
+          tar -xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+          conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policy

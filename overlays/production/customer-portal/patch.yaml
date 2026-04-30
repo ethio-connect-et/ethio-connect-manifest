@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-portal
+spec:
+  template:
+    spec:
+      containers:
+        - name: customer-portal
+          image: ghcr.io/ethioconnect/customer-portal@sha256:2222222222222222222222222222222222222222222222222222222222222222

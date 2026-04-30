@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-portal
+spec:
+  template:
+    spec:
+      containers:
+        - name: vendor-portal
+          image: ghcr.io/ethioconnect/vendor-portal@sha256:1111111111111111111111111111111111111111111111111111111111111111

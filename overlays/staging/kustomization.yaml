@@ -13,4 +13,3 @@ patches:
   - path: vendor-portal/patch.yaml
   - path: customer-portal/patch.yaml
   - path: central-hub/patch.yaml
-  - path: patch-production.yaml
