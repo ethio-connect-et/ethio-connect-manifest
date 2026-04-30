@@ -1,0 +1,54 @@
+name: Promote Image via PR
+
+on:
+  repository_dispatch:
+    types: [promote-image]
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate payload
+        env:
+          APP: ${{ github.event.client_payload.app }}
+          DIGEST: ${{ github.event.client_payload.digest }}
+          ENVIRONMENT: ${{ github.event.client_payload.env }}
+        run: |
+          test -n "$APP"
+          test -n "$DIGEST"
+          test -n "$ENVIRONMENT"
+          echo "$ENVIRONMENT" | grep -E '^(testing|staging|production)$'
+          echo "$APP" | grep -E '^(vendor-portal|customer-portal|central-hub)$'
+          echo "$DIGEST" | grep -E '^sha256:[a-f0-9]{64}$'
+
+      - name: Update manifest patch only
+        env:
+          APP: ${{ github.event.client_payload.app }}
+          DIGEST: ${{ github.event.client_payload.digest }}
+          ENVIRONMENT: ${{ github.event.client_payload.env }}
+        run: |
+          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
+          IMAGE="ghcr.io/ethioconnect/${APP}@${DIGEST}"
+          sed -i -E "s#image: .*#image: ${IMAGE}#" "$FILE"
+
+      - name: Create promotion pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(${{ github.event.client_payload.env }}): promote ${{ github.event.client_payload.app }}@${{ github.event.client_payload.digest }}"
+          committer: Ethio Connect Bot <bot@ethio-connect.com>
+          author: Ethio Connect Bot <bot@ethio-connect.com>
+          signoff: true
+          branch: "bot/promote-${{ github.event.client_payload.env }}-${{ github.event.client_payload.app }}-${{ github.run_id }}"
+          base: ${{ github.event.client_payload.env }}
+          title: "Promote ${{ github.event.client_payload.app }} to ${{ github.event.client_payload.env }}"
+          body: |
+            Automated promotion PR.
+            - app: `${{ github.event.client_payload.app }}`
+            - env: `${{ github.event.client_payload.env }}`
+            - digest: `${{ github.event.client_payload.digest }}`
