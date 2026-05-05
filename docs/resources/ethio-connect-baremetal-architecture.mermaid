@@ -1,0 +1,57 @@
+flowchart LR
+  subgraph USERS[Users and operators]
+    U1[Customers]
+    U2[Vendors]
+    U3[Platform operators]
+  end
+
+  subgraph EDGE[Bare-metal Ubuntu edge]
+    DNS[DNS / public records]
+    LB[External load balancer or MetalLB]
+    ING[Ingress controller + TLS]
+  end
+
+  subgraph CONTROL[Cluster control and GitOps]
+    RANCHER[Rancher\ncluster lifecycle, RBAC, projects]
+    ARGO[Argo CD\nbranch and overlay sync]
+    GHCR[GitHub Container Registry\nimmutable sha256 images]
+    GITOPS[ethio-connect-manifest\nHelm charts + Kustomize overlays]
+  end
+
+  subgraph APPS[Ethio Connect workloads]
+    VAPI[vendor-portal-api]
+    VDASH[vendor-portal-dashboard]
+    VPUB[vendor-portal-public-dashboard]
+    CAPI[customer-portal-api]
+    CDASH[customer-portal-dashboard]
+    HUBAPI[central-hub-api]
+    HUBDASH[central-hub-dashboard]
+  end
+
+  subgraph DATA[Shared platform services]
+    DB[(PostgreSQL / managed DB endpoint)]
+    CACHE[(Redis / cache endpoint)]
+    OBJ[(Object storage / backups)]
+    OBS[Metrics, logs, alerts]
+    SECRETS[Kubernetes Secrets\nfuture: external secret manager]
+  end
+
+  U1 --> DNS --> LB --> ING
+  U2 --> DNS
+  U3 --> RANCHER
+  RANCHER --> ARGO
+  ARGO --> GITOPS
+  ARGO --> APPS
+  APPS --> GHCR
+  APPS --> DB
+  APPS --> CACHE
+  APPS --> OBJ
+  APPS --> SECRETS
+  APPS --> OBS
+  ING --> VAPI
+  ING --> VDASH
+  ING --> VPUB
+  ING --> CAPI
+  ING --> CDASH
+  ING --> HUBAPI
+  ING --> HUBDASH
