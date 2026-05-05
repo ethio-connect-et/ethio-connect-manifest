@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: vendor-portal-api
-          image: ghcr.io/ethioconnect/vendor-portal-api@sha256:1111111111111111111111111111111111111111111111111111111111111111
+          image: ghcr.io/ethio-connect-et/vendor-portal-api@sha256:1111111111111111111111111111111111111111111111111111111111111111
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: vendor-portal-dashboard
-          image: ghcr.io/ethioconnect/vendor-portal-dashboard@sha256:1111111111111111111111111111111111111111111111111111111111111111
+          image: ghcr.io/ethio-connect-et/vendor-portal-dashboard@sha256:1111111111111111111111111111111111111111111111111111111111111111
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,4 +29,4 @@ spec:
     spec:
       containers:
         - name: vendor-portal-public-dashboard
-          image: ghcr.io/ethioconnect/vendor-portal-public-dashboard@sha256:1111111111111111111111111111111111111111111111111111111111111111
+          image: ghcr.io/ethio-connect-et/vendor-portal-public-dashboard@sha256:1111111111111111111111111111111111111111111111111111111111111111

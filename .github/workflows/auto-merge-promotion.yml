@@ -9,6 +9,7 @@ jobs:
   enable-automerge:
     if: startsWith(github.head_ref, 'bot/promote-')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       pull-requests: write
       contents: read
@@ -16,7 +17,7 @@ jobs:
       statuses: read
     steps:
       - name: Verify validation checks succeeded for PR head SHA
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             const owner = context.repo.owner;
