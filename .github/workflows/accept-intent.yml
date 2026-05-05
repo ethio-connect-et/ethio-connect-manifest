@@ -1,69 +1,133 @@
-name: Accept Promotion Intent
+name: Receive Source Promotion
 
 on:
   repository_dispatch:
     types: [promote-image]
 
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  accept:
+  receive:
+    name: Validate dispatch and open GitOps PR
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: write
+      pull-requests: write
+      actions: read
+    concurrency:
+      group: source-promotion-${{ github.event.client_payload.env || 'unknown' }}-${{ github.event.client_payload.app || 'unknown' }}
+      cancel-in-progress: false
+    env:
+      APP: ${{ github.event.client_payload.app }}
+      DIGEST: ${{ github.event.client_payload.digest }}
+      ENVIRONMENT: ${{ github.event.client_payload.env }}
+      SOURCE_REPO: ${{ github.event.client_payload.source_repo || 'ethio-connect-et/ethio-connect' }}
+      SOURCE_REF: ${{ github.event.client_payload.source_ref || '' }}
+      SOURCE_COMMIT: ${{ github.event.client_payload.source_commit || '' }}
+      RELEASE_ID: ${{ github.event.client_payload.release_id || github.run_id }}
+      RELEASE_CREATED_AT: ${{ github.event.client_payload.release_created_at || '' }}
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Checkout manifest default branch for contract scripts
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Validate payload schema
-        shell: bash
+      - name: Validate repository_dispatch payload contract
+        run: python3 .github/scripts/validate_promote_dispatch.py
+
+      - name: Preserve promotion helper from workflow revision
         run: |
           set -euo pipefail
-          python3 .github/scripts/validate_promote_dispatch.py
+          cp .github/scripts/promote_manifest.py /tmp/promote_manifest.py
+          chmod +x /tmp/promote_manifest.py
 
-      - name: Store Intent
-        env:
-          APP: ${{ github.event.client_payload.app }}
-          DIGEST: ${{ github.event.client_payload.digest }}
-          ENVIRONMENT: ${{ github.event.client_payload.env }}
+      - name: Checkout target environment branch
         run: |
           set -euo pipefail
-          mkdir -p "intents/${ENVIRONMENT}"
+          git fetch --no-tags origin "${ENVIRONMENT}"
+          git checkout -B "${ENVIRONMENT}" "origin/${ENVIRONMENT}"
 
-          # Use hash for safe filename
-          SAFE_DIGEST="${DIGEST//sha256:/}"
-          INTENT_FILE="intents/${ENVIRONMENT}/${APP}-${SAFE_DIGEST}.json"
+      - name: Apply immutable digest to target overlay
+        id: promote
+        run: |
+          set -euo pipefail
+          python3 /tmp/promote_manifest.py \
+            --environment "${ENVIRONMENT}" \
+            --app "${APP}" \
+            --digest "${DIGEST}" \
+            --attestation artifacts/promotion-attestation.json
+          patch_file="$(jq -r '.patch_file' artifacts/promotion-attestation.json)"
+          echo "patch_file=${patch_file}" >> "$GITHUB_OUTPUT"
 
-          jq -n \
-            --arg app "$APP" \
-            --arg digest "$DIGEST" \
-            --arg env "$ENVIRONMENT" \
-            --arg source_repo "${{ github.event.client_payload.source_repo }}" \
-            --arg source_ref "${{ github.event.client_payload.source_ref }}" \
-            --arg source_commit "${{ github.event.client_payload.source_commit }}" \
-            --arg release_id "${{ github.event.client_payload.release_id }}" \
-            --arg release_created_at "${{ github.event.client_payload.release_created_at }}" \
-            '{
-              app: $app,
-              digest: $digest,
-              env: $env,
+      - name: Verify promotion diff scope
+        run: |
+          set -euo pipefail
+          expected="${{ steps.promote.outputs.patch_file }}"
+          mapfile -t changed < <(git diff --name-only)
+          if [ "${#changed[@]}" -ne 1 ] || [ "${changed[0]}" != "$expected" ]; then
+            echo "::error::Promotion must change exactly ${expected}; actual changes: ${changed[*]:-none}"
+            exit 1
+          fi
+          git diff -- "$expected"
+
+      - name: Extend promotion attestation with source handoff metadata
+        run: |
+          set -euo pipefail
+          jq \
+            --arg source_repo "${SOURCE_REPO}" \
+            --arg source_ref "${SOURCE_REF}" \
+            --arg source_commit "${SOURCE_COMMIT}" \
+            --arg release_id "${RELEASE_ID}" \
+            --arg release_created_at "${RELEASE_CREATED_AT}" \
+            --arg dispatch_sender "${{ github.event.sender.login }}" \
+            --arg receiver_run_id "${{ github.run_id }}" \
+            '. + {
               source_repo: $source_repo,
               source_ref: $source_ref,
               source_commit: $source_commit,
-              release_id: $release_id,
-              release_created_at: $release_created_at,
-              received_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            }' > "$INTENT_FILE"
-            
-          git config user.name "ethio-connect-bot"
-          git config user.email "bot@ethio-connect.com"
-          git add "$INTENT_FILE"
-          git commit -m "chore(intent): receive promotion intent for ${APP} to ${ENVIRONMENT}"
+              source_release_id: $release_id,
+              source_release_created_at: $release_created_at,
+              dispatch_sender: $dispatch_sender,
+              receiver_run_id: $receiver_run_id
+            }' artifacts/promotion-attestation.json > artifacts/promotion-attestation.tmp
+          mv artifacts/promotion-attestation.tmp artifacts/promotion-attestation.json
+          cat artifacts/promotion-attestation.json >> "$GITHUB_STEP_SUMMARY"
 
-          # Retry loop for push to handle concurrent intent writes
-          for _ in {1..5}; do
-            git pull --rebase origin main && git push origin main && exit 0
-            sleep $(( RANDOM % 5 + 1 ))
-          done
-          echo "::error::Failed to push intent after multiple attempts"
-          exit 1
+      - name: Upload promotion attestation artifact
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: promotion-attestation-${{ env.ENVIRONMENT }}-${{ env.APP }}-${{ github.run_id }}
+          path: artifacts/promotion-attestation.json
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6
+
+      - name: Create environment promotion pull request
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(${{ env.ENVIRONMENT }}): promote ${{ env.APP }} to ${{ env.DIGEST }}"
+          branch: "bot/promote-${{ env.ENVIRONMENT }}-${{ env.APP }}-${{ github.run_id }}"
+          base: ${{ env.ENVIRONMENT }}
+          title: "Promote ${{ env.APP }} to ${{ env.ENVIRONMENT }}"
+          body: |
+            Automated GitOps promotion from `ethio-connect-et/ethio-connect`.
+
+            - app: `${{ env.APP }}`
+            - environment: `${{ env.ENVIRONMENT }}`
+            - immutable image: `ghcr.io/ethio-connect-et/${{ env.APP }}@${{ env.DIGEST }}`
+            - patch file: `${{ steps.promote.outputs.patch_file }}`
+            - source repository: `${{ env.SOURCE_REPO }}`
+            - source ref: `${{ env.SOURCE_REF }}`
+            - source commit: `${{ env.SOURCE_COMMIT }}`
+            - source release/run id: `${{ env.RELEASE_ID }}`
+
+            Argo CD/Rancher remains pull-based: this workflow only proposes a manifest change; cluster sync starts after branch protection, checks, and merge.
+          labels: |
+            promotion
+            ${{ env.ENVIRONMENT }}

@@ -46,14 +46,19 @@ jobs:
           echo "$PREV_DIGEST" | grep -E '^sha256:[a-f0-9]{64}$'
           test -n "$CHANGE_TICKET"
 
-      - name: Install yq
-        run: sudo snap install yq
+      - name: Preserve promotion helper and checkout target branch
+        run: |
+          set -euo pipefail
+          cp .github/scripts/promote_manifest.py /tmp/promote_manifest.py
+          chmod +x /tmp/promote_manifest.py
+          git fetch --no-tags origin "${ENVIRONMENT}"
+          git checkout -B "${ENVIRONMENT}" "origin/${ENVIRONMENT}"
 
       - name: Verify previous-good digest exists in git history
         run: |
           set -euo pipefail
-          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
-          test -f "$FILE"
+          FILE="$(python3 /tmp/promote_manifest.py --environment "${ENVIRONMENT}" --app "${APP}" --digest "${PREV_DIGEST}" --attestation /tmp/rollback-probe.json | jq -r '."patch_file"')"
+          git checkout -- "$FILE"
           if ! git log --follow -p -- "$FILE" | grep -F "$PREV_DIGEST" >/dev/null; then
             echo "Digest ${PREV_DIGEST} has no verifiable history in ${FILE}" >&2
             exit 1
@@ -62,27 +67,27 @@ jobs:
       - name: Apply rollback digest
         run: |
           set -euo pipefail
-          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
-          export IMAGE="ghcr.io/ethio-connect-et/${APP}@${PREV_DIGEST}"
-          COUNT="$(yq -r '.spec.template.spec.containers[] | select(.name == env(APP)) | .image' "$FILE" | wc -l | tr -d ' ')"
-          [ "$COUNT" = "1" ] || { echo "Expected one mutable image field for rollback, found $COUNT" >&2; exit 1; }
-          yq -i '(.spec.template.spec.containers[] | select(.name == env(APP)) | .image) = env(IMAGE)' "$FILE"
+          python3 /tmp/promote_manifest.py \
+            --environment "${ENVIRONMENT}" \
+            --app "${APP}" \
+            --digest "${PREV_DIGEST}" \
+            --attestation artifacts/rollback-attestation.json
 
       - name: Emit rollback attestation artifact
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          cat > artifacts/rollback-attestation.json <<JSON
-          {
-            "app": "${APP}",
-            "environment": "${ENVIRONMENT}",
-            "rollback_digest": "${PREV_DIGEST}",
-            "change_ticket": "${CHANGE_TICKET}",
-            "requested_by": "${{ github.actor }}",
-            "run_id": "${{ github.run_id }}",
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          JSON
+          jq \
+            --arg change_ticket "${CHANGE_TICKET}" \
+            --arg requested_by "${{ github.actor }}" \
+            --arg run_id "${{ github.run_id }}" \
+            '. + {
+              rollback_digest: .digest,
+              change_ticket: $change_ticket,
+              requested_by: $requested_by,
+              run_id: $run_id
+            }' artifacts/rollback-attestation.json > artifacts/rollback-attestation.tmp
+          mv artifacts/rollback-attestation.tmp artifacts/rollback-attestation.json
 
       - name: Upload rollback attestation
         # Pinned to SHA for supply-chain security; corresponds to actions/upload-artifact@v4
@@ -90,6 +95,9 @@ jobs:
         with:
           name: rollback-attestation-${{ env.ENVIRONMENT }}-${{ env.APP }}
           path: artifacts/rollback-attestation.json
+          if-no-files-found: error
+          retention-days: 180
+          compression-level: 6
 
       - name: Create rollback pull request
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
