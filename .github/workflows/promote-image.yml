@@ -53,6 +53,36 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
+      - name: Validate repository_dispatch payload schema and policy
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        id: dispatch_validation
+        shell: bash
+        run: |
+          set +e
+          reason="$(python3 .github/scripts/validate_promote_dispatch.py 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$reason" >> "$GITHUB_OUTPUT"
+            echo "DISPATCH_VALID=false" >> "$GITHUB_ENV"
+            echo "VALIDATION_REASON=$reason" >> "$GITHUB_ENV"
+          else
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "reason=$reason" >> "$GITHUB_OUTPUT"
+            echo "DISPATCH_VALID=true" >> "$GITHUB_ENV"
+            echo "VALIDATION_REASON=$reason" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write dispatch validation summary
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        run: |
+          {
+            echo "## repository_dispatch validation"
+            echo "- result: ${{ steps.dispatch_validation.outputs.valid == 'true' && 'pass' || 'fail' }}"
+            echo "- detail: ${{ steps.dispatch_validation.outputs.reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Validate repository_dispatch sender/provenance policy
         if: ${{ github.event_name == 'repository_dispatch' }}
         env:
@@ -94,6 +124,7 @@ jobs:
           echo "$RELEASE_CREATED_AT" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
 
       - name: Validate payload and discover supported apps
+        if: ${{ github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true' }}
         run: |
           set -euo pipefail
           test -n "$APP"
@@ -116,10 +147,11 @@ jobs:
           fi
 
       - name: Install yq
+        if: ${{ github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true' }}
         run: sudo snap install yq
 
       - name: Verify mandatory attestation and release metadata
-        if: ${{ github.event_name == 'repository_dispatch' }}
+        if: ${{ github.event_name == 'repository_dispatch' && env.DISPATCH_VALID == 'true' }}
         run: |
           set -euo pipefail
           FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
@@ -139,6 +171,7 @@ jobs:
           fi
 
       - name: Update manifest patch only (schema-aware)
+        if: ${{ github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true' }}
         run: |
           set -euo pipefail
           export IMAGE="ghcr.io/ethio-connect-et/${APP}@${DIGEST}"
@@ -154,6 +187,7 @@ jobs:
           [ "$AFTER_MATCH_COUNT" = "1" ] || { echo "Mutation failed: expected exactly one intended image mutation in $FILE" >&2; exit 1; }
 
       - name: Enforce path integrity
+        if: ${{ github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true' }}
         run: |
           set -euo pipefail
           FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
@@ -171,7 +205,7 @@ jobs:
           fi
 
       - name: Stop in dry-run mode
-        if: ${{ env.DRY_RUN == 'true' }}
+        if: ${{ (github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true') && env.DRY_RUN == 'true' }}
         run: |
           echo "Dry-run mode enabled; skipping PR creation."
           echo "Would promote ${APP} to ${ENVIRONMENT} with digest ${DIGEST}"
@@ -180,7 +214,7 @@ jobs:
       # documented impact; the create-pull-request action is only reached in
       # live (non-dry-run) runs.
       - name: Create promotion pull request
-        if: ${{ env.DRY_RUN != 'true' }}
+        if: ${{ (github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true') && env.DRY_RUN != 'true' }}
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
