@@ -86,11 +86,11 @@ jobs:
 
       - name: Policy checks (conftest)
         run: |
-          # 'policy' directory must exist in the manifest repo; skip gracefully if absent
-          if [ -d policy ]; then
-            conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policy
+          # 'policies' directory must exist in the manifest repo; skip gracefully if absent
+          if [ -d policies ]; then
+            conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policies
           else
-            echo "::warning::No 'policy' directory found; skipping conftest OPA checks."
+            echo "::warning::No 'policies' directory found; skipping conftest OPA checks."
           fi
 
   contract-validation:
@@ -125,8 +125,8 @@ jobs:
 
       - name: Replay promotion payload contract (dry-run)
         run: |
-          if [ -d policy ]; then
-            conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policy
+          if [ -d policies ]; then
+            conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policies
           else
-            echo "::warning::No 'policy' directory found; skipping conftest OPA policy contract check."
+            echo "::warning::No 'policies' directory found; skipping conftest OPA policy contract check."
           fi
