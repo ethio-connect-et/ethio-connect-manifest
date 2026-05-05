@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:latest
+          image: {{ .Values.images.keycloak.repository }}{{ if .Values.images.keycloak.digest }}@{{ .Values.images.keycloak.digest }}{{ else }}:{{ .Values.images.keycloak.tag }}{{ end }}
           ports:
             - containerPort: 8080
 ---
@@ -34,7 +34,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:15
+          image: {{ .Values.images.postgres.repository }}{{ if .Values.images.postgres.digest }}@{{ .Values.images.postgres.digest }}{{ else }}:{{ .Values.images.postgres.tag }}{{ end }}
           ports:
             - containerPort: 5432
 ---
@@ -54,6 +54,6 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7
+          image: {{ .Values.images.redis.repository }}{{ if .Values.images.redis.digest }}@{{ .Values.images.redis.digest }}{{ else }}:{{ .Values.images.redis.tag }}{{ end }}
           ports:
             - containerPort: 6379

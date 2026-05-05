@@ -11,8 +11,41 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-      contents: write
+      contents: read
+      checks: read
+      statuses: read
     steps:
+      - name: Verify validation checks succeeded for PR head SHA
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.pull_request.head.sha;
+
+            const checks = await github.paginate(github.rest.checks.listForRef, {
+              owner, repo, ref: sha, per_page: 100
+            });
+            const statuses = await github.paginate(github.rest.repos.listCommitStatusesForRef, {
+              owner, repo, ref: sha, per_page: 100
+            });
+
+            const requiredCheckRuns = ['Manifest Validation / validate', 'Manifest Validation / contract-validation'];
+            for (const name of requiredCheckRuns) {
+              const match = checks.find(c => c.name === name);
+              if (!match) core.setFailed(`Missing required check run: ${name} on ${sha}`);
+              else if (match.status !== 'completed' || match.conclusion !== 'success') {
+                core.setFailed(`Check run not successful: ${name} (status=${match.status}, conclusion=${match.conclusion})`);
+              }
+            }
+
+            const requiredStatuses = [];
+            for (const statusName of requiredStatuses) {
+              const status = statuses.find(s => s.context === statusName);
+              if (!status) core.setFailed(`Missing required status context: ${statusName}`);
+              else if (status.state !== 'success') core.setFailed(`Status context not successful: ${statusName} (${status.state})`);
+            }
+
       - name: Enable auto-merge (branch protection aware)
         uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
         with:

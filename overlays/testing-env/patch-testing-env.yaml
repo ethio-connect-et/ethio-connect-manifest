@@ -2,13 +2,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vendor-portal
+  name: vendor-portal-api
 spec:
   template:
     spec:
       containers:
-        - name: vendor-portal
-          image: ghcr.io/ethioconnect/vendor-portal:test
+        - name: vendor-portal-api
+          image: ghcr.io/ethioconnect/vendor-portal-api:test
           resources:
             limits:
               cpu: "250m"

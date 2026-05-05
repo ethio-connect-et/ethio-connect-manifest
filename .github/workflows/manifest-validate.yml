@@ -17,9 +17,16 @@ jobs:
       - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
       - name: Kustomize build checks
         run: |
-          kustomize build overlays/testing >/tmp/testing.yaml
-          kustomize build overlays/staging >/tmp/staging.yaml
-          kustomize build overlays/production >/tmp/production.yaml
+          kustomize build --enable-helm overlays/testing >/tmp/testing.yaml
+          kustomize build --enable-helm overlays/staging >/tmp/staging.yaml
+          kustomize build --enable-helm overlays/production >/tmp/production.yaml
+
+      - name: Enforce immutable/non-latest images
+        run: |
+          if rg -n 'image:\s+\S+:latest(\s|$)' /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; then
+            echo "Found forbidden :latest image tags in rendered manifests" >&2
+            exit 1
+          fi
 
       - name: Install Helm
         uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a
@@ -30,14 +37,43 @@ jobs:
           helm lint charts/central-hub
           helm lint charts/shared-infrastructure
 
-      - name: Schema validation (kubeconform)
+      - name: Install kubeconform (pinned)
         run: |
-          curl -sSL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
-          tar -xzf kubeconform.tar.gz kubeconform
-          sudo mv kubeconform /usr/local/bin/kubeconform
-          kubeconform -strict -summary /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml
+          set -euo pipefail
+          VERSION=v0.6.7
+          FILE=kubeconform-linux-amd64.tar.gz
+          URL="https://github.com/yannh/kubeconform/releases/download/${VERSION}/${FILE}"
+          EXPECTED_SHA256="95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73"
+          curl -fsSL -o "$FILE" "$URL"
+          echo "${EXPECTED_SHA256}  ${FILE}" | sha256sum -c -
+          tar -xzf "$FILE" kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+
+      - name: Schema validation (kubeconform)
+        run: kubeconform -strict -summary /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml
+
+      - name: Install conftest (pinned)
+        run: |
+          set -euo pipefail
+          VERSION=0.59.0
+          FILE=conftest_${VERSION}_Linux_x86_64.tar.gz
+          URL="https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/${FILE}"
+          EXPECTED_SHA256="af879740a9b43aae21f928ed5d3571615c9d17b5d0551623a56d317812db0f98"
+          curl -fsSL -o "$FILE" "$URL"
+          echo "${EXPECTED_SHA256}  ${FILE}" | sha256sum -c -
+          tar -xzf "$FILE" conftest
+          sudo install -m 0755 conftest /usr/local/bin/conftest
 
       - name: Policy checks (conftest)
+        run: conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policy
+
+  contract-validation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Replay promotion payload contract (dry-run)
         run: |
           curl -sSL -o conftest.tar.gz "https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_$(uname -s)_$(uname -m).tar.gz"
           tar -xzf conftest.tar.gz conftest
