@@ -22,24 +22,9 @@ jobs:
           kustomize build --enable-helm overlays/staging  >/tmp/staging.yaml
           kustomize build --enable-helm overlays/production >/tmp/production.yaml
 
-      - name: Enforce production image hardening policy
+      - name: Enforce runtime image reference policy
         shell: bash
-        run: |
-          set -euo pipefail
-          if grep -En 'image:\s+\S+:latest(\s|$)' /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; then
-            echo "Found forbidden :latest image tags in rendered manifests" >&2
-            exit 1
-          fi
-          if grep -En 'image:\s+[^@[:space:]]+:[^@[:space:]]+' /tmp/production.yaml; then
-            echo "Production manifests must use digest-only image references (no mutable tags)." >&2
-            exit 1
-          fi
-          if grep -qEn 'image:\s+\S+@sha256:[a-f0-9]{64}' /tmp/production.yaml; then
-            echo "Digest-only image references detected for production."
-          else
-            echo "No digest-pinned images found in production manifests." >&2
-            exit 1
-          fi
+        run: python3 .github/scripts/validate_runtime_images.py
 
       - name: Enforce bare-metal rollout annotations and limits
         shell: bash
