@@ -12,9 +12,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
-      - uses: imranismail/setup-kustomize@v2.1.0
+      - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
       - name: Kustomize build checks
         run: |
           kustomize build --enable-helm overlays/testing >/tmp/testing.yaml
@@ -29,7 +29,7 @@ jobs:
           fi
 
       - name: Install Helm
-        uses: azure/setup-helm@v4.3.0
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a
       - name: Helm lint checks
         run: |
           helm lint charts/vendor-portal
@@ -75,21 +75,7 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - name: Replay promotion payload contract (dry-run)
         run: |
-          set -euo pipefail
-          for ENVIRONMENT in testing staging production; do
-            mapfile -t APPS < <(find "overlays/${ENVIRONMENT}" -mindepth 2 -maxdepth 2 -name patch.yaml -printf '%h\n' | xargs -n1 basename | sort -u)
-            for APP in "${APPS[@]}"; do
-              DIGEST="sha256:1111111111111111111111111111111111111111111111111111111111111111"
-              FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
-              IMAGE="ghcr.io/ethio-connect-et/${APP}@${DIGEST}"
-              test -n "$APP"
-              test -f "$FILE"
-              grep -q "name: ${APP}" "$FILE"
-              echo "$DIGEST" | grep -E '^sha256:[a-f0-9]{64}$'
-              awk -v app="$APP" -v image="$IMAGE" '
-                $0 ~ "name: " app { in_target=1 }
-                in_target && $0 ~ /^[[:space:]]*image:/ { sub(/image:.*/, "image: " image); in_target=0 }
-                { print }
-              ' "$FILE" >/dev/null
-            done
-          done
+          curl -sSL -o conftest.tar.gz "https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_$(uname -s)_$(uname -m).tar.gz"
+          tar -xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+          conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policy

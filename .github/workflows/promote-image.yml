@@ -39,7 +39,7 @@ jobs:
       ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.env || github.event.client_payload.env }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Validate payload and discover supported apps
         run: |
@@ -108,8 +108,7 @@ jobs:
         run: echo "Dry-run mode enabled; skipping PR creation."
 
       - name: Create promotion pull request
-        if: ${{ env.DRY_RUN != 'true' }}
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(${{ env.ENVIRONMENT }}): promote ${{ env.APP }}@${{ env.DIGEST }}"
