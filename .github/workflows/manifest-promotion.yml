@@ -8,6 +8,10 @@ on:
         type: choice
         options: [testing, staging, production]
         required: true
+      app:
+        description: Name of the application to promote
+        type: string
+        required: true
       source_repo:
         description: Source repository
         required: true
@@ -42,9 +46,27 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
 
+      - name: Install yq
+        run: sudo snap install yq
+
       - name: Apply manifest promotion changes
         run: |
-          echo "Promotion to ${{ inputs.environment }} from ${{ inputs.source_repo }}@${{ inputs.source_ref }}"
+          set -euo pipefail
+          env="${{ inputs.environment }}"
+          app="${{ inputs.app }}"
+          digest="${{ inputs.release_digest }}"
+          image="ghcr.io/ethio-connect-et/${app}@${digest}"
+          
+          patch_file="overlays/${env}/${app}/patch.yaml"
+          echo "Promotion to ${env} for app ${app} with image ${image}"
+          echo "Updating ${patch_file}"
+          
+          if [ ! -f "$patch_file" ]; then
+            echo "::error::Patch file not found for ${app} in ${env}: ${patch_file}"
+            exit 1
+          fi
+          
+          yq -i '(.spec.template.spec.containers[] | select(.name == "'"$app"'") | .image) = "'"$image"'"' "$patch_file"
 
       - name: Commit signed manifest update
         run: |
