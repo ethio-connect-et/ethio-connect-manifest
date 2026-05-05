@@ -49,8 +49,17 @@ def changed_overlay_paths() -> list[str]:
     if not base:
         return []
 
-    subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", base], check=True)
-    diff = subprocess.check_output(["git", "diff", "--name-only", f"origin/{base}...HEAD"], text=True)
+    # Ensure the base branch is fetched so origin/{base} exists
+    subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", base], check=True, capture_output=True)
+
+    try:
+        # Try triple-dot diff (merge-base to HEAD), which is ideal for PRs
+        diff = subprocess.check_output(["git", "diff", "--name-only", f"origin/{base}...HEAD"], text=True)
+    except subprocess.CalledProcessError:
+        # Fallback to double-dot diff (base tip to HEAD) if merge-base is missing.
+        # In GitHub Actions PR checkout, HEAD is often a merge commit, so this
+        # still correctly represents the PR changes without needing full history.
+        diff = subprocess.check_output(["git", "diff", "--name-only", f"origin/{base}", "HEAD"], text=True)
 
     targets: list[str] = []
     for rel in diff.splitlines():
