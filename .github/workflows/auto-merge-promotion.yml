@@ -31,7 +31,7 @@ jobs:
               owner, repo, ref: sha, per_page: 100
             });
 
-            const requiredCheckRuns = ['Manifest Validation / validate', 'Manifest Validation / contract-validation'];
+            const requiredCheckRuns = ['Manifest Validation / Validate rendered manifests', 'Manifest Validation / Validate source handoff contract'];
             for (const name of requiredCheckRuns) {
               const match = checks.find(c => c.name === name);
               if (!match) core.setFailed(`Missing required check run: ${name} on ${sha}`);
