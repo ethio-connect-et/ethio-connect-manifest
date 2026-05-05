@@ -15,15 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
-      - name: Install ripgrep
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v rg &>/dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends ripgrep
-          fi
-
       - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
       - name: Kustomize build checks
         run: |
@@ -35,15 +26,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if rg -n 'image:\s+\S+:latest(\s|$)' /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; then
+          if grep -En 'image:\s+\S+:latest(\s|$)' /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; then
             echo "Found forbidden :latest image tags in rendered manifests" >&2
             exit 1
           fi
-          if rg -n 'image:\s+[^@[:space:]]+:[^@[:space:]]+' /tmp/production.yaml; then
+          if grep -En 'image:\s+[^@[:space:]]+:[^@[:space:]]+' /tmp/production.yaml; then
             echo "Production manifests must use digest-only image references (no mutable tags)." >&2
             exit 1
           fi
-          if rg -qn 'image:\s+\S+@sha256:[a-f0-9]{64}' /tmp/production.yaml; then
+          if grep -qEn 'image:\s+\S+@sha256:[a-f0-9]{64}' /tmp/production.yaml; then
             echo "Digest-only image references detected for production."
           else
             echo "No digest-pinned images found in production manifests." >&2
@@ -56,15 +47,15 @@ jobs:
           set -euo pipefail
           for f in /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; do
             env_name="$(basename "$f" .yaml)"
-            if ! rg -qn 'ethio-connect.io/rollout-policy:' "$f"; then
+            if ! grep -qEn 'ethio-connect.io/rollout-policy:' "$f"; then
               echo "Missing ethio-connect.io/rollout-policy annotation in ${env_name}" >&2
               exit 1
             fi
-            if ! rg -qn 'ethio-connect.io/baremetal-max-unavailable:' "$f"; then
+            if ! grep -qEn 'ethio-connect.io/baremetal-max-unavailable:' "$f"; then
               echo "Missing ethio-connect.io/baremetal-max-unavailable annotation in ${env_name}" >&2
               exit 1
             fi
-            if ! rg -qn 'maxUnavailable:' "$f"; then
+            if ! grep -qEn 'maxUnavailable:' "$f"; then
               echo "Missing rollout maxUnavailable for ${env_name}" >&2
               exit 1
             fi
