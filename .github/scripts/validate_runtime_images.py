@@ -20,7 +20,10 @@ def check_rendered_manifests() -> list[str]:
     errors: list[str] = []
     for env, path in ENV_FILES.items():
         if not path.exists():
-            errors.append(f"missing rendered manifest for {env}: {path}")
+            errors.append(
+                f"missing rendered manifest for {env}: {path}. "
+                f"Run 'kustomize build --enable-helm overlays/{env} > {path}' to generate it."
+            )
             continue
         for idx, line in enumerate(path.read_text().splitlines(), 1):
             m = IMAGE_LINE_RE.match(line)
