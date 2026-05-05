@@ -23,7 +23,7 @@ jobs:
           test -n "$DIGEST"
           test -n "$ENVIRONMENT"
           echo "$ENVIRONMENT" | grep -E '^(testing|staging|production)$'
-          echo "$APP" | grep -E '^(vendor-portal|customer-portal|central-hub)$'
+          echo "$APP" | grep -E '^(vendor-portal-api|vendor-portal-dashboard|vendor-portal-public-dashboard|customer-portal-api|customer-portal-dashboard|central-hub-api|central-hub-dashboard|shared-infrastructure)$'
           echo "$DIGEST" | grep -E '^sha256:[a-f0-9]{64}$'
 
       - name: Update manifest patch only
@@ -32,9 +32,31 @@ jobs:
           DIGEST: ${{ github.event.client_payload.digest }}
           ENVIRONMENT: ${{ github.event.client_payload.env }}
         run: |
-          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
           IMAGE="ghcr.io/ethioconnect/${APP}@${DIGEST}"
-          sed -i -E "s#image: .*#image: ${IMAGE}#" "$FILE"
+
+          case "$APP" in
+            vendor-portal-*) OWNER_APP="vendor-portal" ;;
+            customer-portal-*) OWNER_APP="customer-portal" ;;
+            central-hub-*) OWNER_APP="central-hub" ;;
+            shared-infrastructure)
+              echo "shared-infrastructure has no image patch target in overlays/${ENVIRONMENT}; skipping update by design."
+              exit 0
+              ;;
+            *)
+              echo "Unsupported app: $APP"
+              exit 1
+              ;;
+          esac
+
+          FILE="overlays/${ENVIRONMENT}/${OWNER_APP}/patch.yaml"
+          test -f "$FILE"
+          grep -q "name: ${APP}" "$FILE"
+          awk -v app="$APP" -v image="$IMAGE" '
+            $0 ~ "name: " app { in_target=1 }
+            in_target && $0 ~ /^[[:space:]]*image:/ { sub(/image:.*/, "image: " image); in_target=0 }
+            { print }
+          ' "$FILE" > "$FILE.tmp"
+          mv "$FILE.tmp" "$FILE"
 
       - name: Create promotion pull request
         uses: peter-evans/create-pull-request@v6
