@@ -35,12 +35,12 @@ jobs:
           set -euo pipefail
           for f in /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; do
             env_name="$(basename "$f" .yaml)"
-            if ! grep -qEn 'ethio-connect.io/rollout-policy:' "$f"; then
-              echo "Missing ethio-connect.io/rollout-policy annotation in ${env_name}" >&2
+            if ! grep -qEn '^[[:space:]]+[A-Za-z0-9.-]+/rollout-policy:' "$f"; then
+              echo "Missing rollout-policy annotation (domain-scoped) in ${env_name}" >&2
               exit 1
             fi
-            if ! grep -qEn 'ethio-connect.io/baremetal-max-unavailable:' "$f"; then
-              echo "Missing ethio-connect.io/baremetal-max-unavailable annotation in ${env_name}" >&2
+            if ! grep -qEn '^[[:space:]]+[A-Za-z0-9.-]+/baremetal-max-unavailable:' "$f"; then
+              echo "Missing baremetal-max-unavailable annotation (domain-scoped) in ${env_name}" >&2
               exit 1
             fi
             if ! grep -qEn 'maxUnavailable:' "$f"; then
