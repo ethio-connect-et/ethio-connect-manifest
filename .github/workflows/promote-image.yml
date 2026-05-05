@@ -38,8 +38,52 @@ jobs:
       DIGEST: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.digest || github.event.client_payload.digest }}
       ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.env || github.event.client_payload.env }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+      SOURCE_REPO: ${{ github.event.client_payload.source_repo }}
+      SOURCE_REF: ${{ github.event.client_payload.source_ref }}
+      SOURCE_COMMIT: ${{ github.event.client_payload.source_commit }}
+      RELEASE_ID: ${{ github.event.client_payload.release_id }}
+      RELEASE_CREATED_AT: ${{ github.event.client_payload.release_created_at }}
+      SIGNED_METADATA: ${{ github.event.client_payload.signed_metadata }}
+      ATTESTATION_BUNDLE: ${{ github.event.client_payload.attestation_bundle }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Validate repository_dispatch sender/provenance policy
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        env:
+          ALLOWED_SOURCE_REPO: ethio-connect-et/source-images
+          ALLOWED_ACTOR: ethio-connect-bot
+          ALLOWED_GITHUB_APP_SLUG: ethio-connect-promoter
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_REPO"
+          test -n "$SOURCE_REF"
+          test -n "$SOURCE_COMMIT"
+          test -n "$RELEASE_ID"
+          test -n "$RELEASE_CREATED_AT"
+          test -n "$SIGNED_METADATA"
+          test -n "$ATTESTATION_BUNDLE"
+
+          if [ "$SOURCE_REPO" != "$ALLOWED_SOURCE_REPO" ]; then
+            echo "Untrusted source repo: $SOURCE_REPO" >&2
+            exit 1
+          fi
+
+          # actor/app token policy: require bot actor or github app trigger
+          if [ "${{ github.actor }}" != "$ALLOWED_ACTOR" ] && [ "${{ github.event.sender.type }}" != "Bot" ]; then
+            echo "Dispatch rejected: actor '${{ github.actor }}' sender type '${{ github.event.sender.type }}' not allowed" >&2
+            exit 1
+          fi
+
+          if [ "${{ github.event.sender.type }}" = "Bot" ] && [ "${{ github.event.sender.login }}" != "$ALLOWED_GITHUB_APP_SLUG[bot]" ]; then
+            echo "Dispatch bot sender login '${{ github.event.sender.login }}' does not match expected app bot" >&2
+            exit 1
+          fi
+
+          echo "$SOURCE_REF" | grep -E '^(refs/heads/main|refs/tags/v[0-9]+\.[0-9]+\.[0-9]+)$'
+          echo "$SOURCE_COMMIT" | grep -E '^[a-f0-9]{40}$'
+          echo "$RELEASE_ID" | grep -E '^[0-9]+$'
+          echo "$RELEASE_CREATED_AT" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
 
       - name: Validate payload and discover supported apps
         run: |
@@ -63,28 +107,43 @@ jobs:
             exit 1
           fi
 
-      - name: Update manifest patch only
+      - name: Install yq
+        run: sudo snap install yq
+
+      - name: Verify mandatory attestation and release metadata
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        run: |
+          set -euo pipefail
+          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
+          test -f "$FILE"
+          BEFORE_DIGEST="$(yq -r '.spec.template.spec.containers[] | select(.name == env(APP)) | .image' "$FILE" | sed -n 's/.*@\(sha256:[a-f0-9]\{64\}\)$/\1/p')"
+          test -n "$BEFORE_DIGEST"
+
+          echo "$ATTESTATION_BUNDLE" | grep -F "$DIGEST" >/dev/null
+          echo "$ATTESTATION_BUNDLE" | grep -F "$SOURCE_COMMIT" >/dev/null
+          echo "$ATTESTATION_BUNDLE" | grep -F "$SOURCE_REF" >/dev/null
+          echo "$ATTESTATION_BUNDLE" | grep -F "$RELEASE_ID" >/dev/null
+          echo "$ATTESTATION_BUNDLE" | grep -F "$RELEASE_CREATED_AT" >/dev/null
+
+          if [ "$BEFORE_DIGEST" = "$DIGEST" ]; then
+            echo "Digest already at desired state; refusing empty promotion." >&2
+            exit 1
+          fi
+
+      - name: Update manifest patch only (schema-aware)
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/ethio-connect-et/${APP}@${DIGEST}"
           FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
+          test -f "$FILE"
 
-          if [ ! -f "$FILE" ]; then
-            echo "Expected target file missing: $FILE" >&2
-            exit 1
-          fi
+          BEFORE_COUNT="$(yq -r '.spec.template.spec.containers[] | select(.name == env(APP)) | .image' "$FILE" | wc -l | tr -d ' ')"
+          [ "$BEFORE_COUNT" = "1" ] || { echo "Expected exactly one image field for app '$APP' in $FILE, found $BEFORE_COUNT" >&2; exit 1; }
 
-          if ! grep -q "name: ${APP}" "$FILE"; then
-            echo "Could not find expected name entry for app '${APP}' in ${FILE}" >&2
-            exit 1
-          fi
+          yq -i '(.spec.template.spec.containers[] | select(.name == env(APP)) | .image) = env(IMAGE)' "$FILE"
 
-          awk -v app="$APP" -v image="$IMAGE" '
-            $0 ~ "name: " app { in_target=1 }
-            in_target && $0 ~ /^[[:space:]]*image:/ { sub(/image:.*/, "image: " image); in_target=0 }
-            { print }
-          ' "$FILE" > "$FILE.tmp"
-          mv "$FILE.tmp" "$FILE"
+          AFTER_MATCH_COUNT="$(yq -r '.spec.template.spec.containers[] | select(.name == env(APP) and .image == env(IMAGE)) | .image' "$FILE" | wc -l | tr -d ' ')"
+          [ "$AFTER_MATCH_COUNT" = "1" ] || { echo "Mutation failed: expected exactly one intended image mutation in $FILE" >&2; exit 1; }
 
       - name: Enforce path integrity
         run: |
@@ -123,3 +182,7 @@ jobs:
             - app: `${{ env.APP }}`
             - env: `${{ env.ENVIRONMENT }}`
             - digest: `${{ env.DIGEST }}`
+            - source_repo: `${{ env.SOURCE_REPO }}`
+            - source_ref: `${{ env.SOURCE_REF }}`
+            - source_commit: `${{ env.SOURCE_COMMIT }}`
+            - release_id: `${{ env.RELEASE_ID }}`

@@ -1,0 +1,104 @@
+name: Rollback Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Application name
+        required: true
+        type: string
+      env:
+        description: Environment to rollback
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - production
+      previous_good_digest:
+        description: Verifiable previous-good digest sha256:...
+        required: true
+        type: string
+      change_ticket:
+        description: Change ticket/reference for audit trail
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+      pull-requests: write
+    env:
+      APP: ${{ github.event.inputs.app }}
+      ENVIRONMENT: ${{ github.event.inputs.env }}
+      PREV_DIGEST: ${{ github.event.inputs.previous_good_digest }}
+      CHANGE_TICKET: ${{ github.event.inputs.change_ticket }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Validate rollback contract input
+        run: |
+          set -euo pipefail
+          echo "$PREV_DIGEST" | grep -E '^sha256:[a-f0-9]{64}$'
+          test -n "$CHANGE_TICKET"
+
+      - name: Install yq
+        run: sudo snap install yq
+
+      - name: Verify previous-good digest exists in git history
+        run: |
+          set -euo pipefail
+          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
+          test -f "$FILE"
+          if ! git log --follow -p -- "$FILE" | grep -F "$PREV_DIGEST" >/dev/null; then
+            echo "Digest ${PREV_DIGEST} has no verifiable history in ${FILE}" >&2
+            exit 1
+          fi
+
+      - name: Apply rollback digest
+        run: |
+          set -euo pipefail
+          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
+          IMAGE="ghcr.io/ethio-connect-et/${APP}@${PREV_DIGEST}"
+          COUNT="$(yq -r '.spec.template.spec.containers[] | select(.name == env(APP)) | .image' "$FILE" | wc -l | tr -d ' ')"
+          [ "$COUNT" = "1" ] || { echo "Expected one mutable image field for rollback, found $COUNT" >&2; exit 1; }
+          yq -i '(.spec.template.spec.containers[] | select(.name == env(APP)) | .image) = env(IMAGE)' "$FILE"
+
+      - name: Emit rollback attestation artifact
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cat > artifacts/rollback-attestation.json <<JSON
+          {
+            "app": "${APP}",
+            "environment": "${ENVIRONMENT}",
+            "rollback_digest": "${PREV_DIGEST}",
+            "change_ticket": "${CHANGE_TICKET}",
+            "requested_by": "${{ github.actor }}",
+            "run_id": "${{ github.run_id }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rollback-attestation-${{ env.ENVIRONMENT }}-${{ env.APP }}
+          path: artifacts/rollback-attestation.json
+
+      - name: Create rollback pull request
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(${{ env.ENVIRONMENT }}): rollback ${{ env.APP }} to ${{ env.PREV_DIGEST }}"
+          branch: "bot/rollback-${{ env.ENVIRONMENT }}-${{ env.APP }}-${{ github.run_id }}"
+          base: ${{ env.ENVIRONMENT }}
+          title: "Rollback ${{ env.APP }} in ${{ env.ENVIRONMENT }}"
+          body: |
+            Automated rollback PR.
+            - app: `${{ env.APP }}`
+            - env: `${{ env.ENVIRONMENT }}`
+            - previous_good_digest: `${{ env.PREV_DIGEST }}`
+            - change_ticket: `${{ env.CHANGE_TICKET }}`
