@@ -1,0 +1,19 @@
+name: Promotion Gate
+
+on:
+  pull_request:
+    branches: [testing, staging, production]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-promotion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate promotion source metadata
+        run: |
+          test -n "${{ github.event.pull_request.head.sha }}"
+          test -n "${{ github.event.pull_request.base.ref }}"
+          echo "Promotion metadata validated for ${GITHUB_REF_NAME}."
