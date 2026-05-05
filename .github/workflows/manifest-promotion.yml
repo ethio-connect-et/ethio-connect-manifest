@@ -37,6 +37,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
 
       - name: Import bot signing key
         uses: crazy-max/ghaction-import-gpg@v6
@@ -70,10 +72,13 @@ jobs:
 
       - name: Commit signed manifest update
         run: |
+          set -euo pipefail
           git config user.name "ethio-connect-manifest-bot"
           git config user.email "manifest-bot@users.noreply.github.com"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git add "overlays/${{ inputs.environment }}/${{ inputs.app }}/patch.yaml"
           git commit --allow-empty -S -m "chore(${{ inputs.environment }}): promote ${{ inputs.source_commit }}"
-          git push
+          git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Build promotion audit record
         run: |
