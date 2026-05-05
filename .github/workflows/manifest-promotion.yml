@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
   actions: read
 
 jobs:
@@ -40,35 +41,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Import bot signing key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.MANIFEST_BOT_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.MANIFEST_BOT_GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Install yq
-        run: sudo snap install yq
-
-      - name: Apply manifest promotion changes
+      - name: Preserve promotion helper and checkout target branch
         run: |
           set -euo pipefail
-          env="${{ inputs.environment }}"
-          app="${{ inputs.app }}"
-          digest="${{ inputs.release_digest }}"
-          image="ghcr.io/ethio-connect-et/${app}@${digest}"
+          cp .github/scripts/promote_manifest.py /tmp/promote_manifest.py
+          chmod +x /tmp/promote_manifest.py
+          git fetch --no-tags origin "${{ inputs.environment }}"
+          git checkout -B "${{ inputs.environment }}" "origin/${{ inputs.environment }}"
 
-          patch_file="overlays/${env}/${app}/patch.yaml"
-          echo "Promotion to ${env} for app ${app} with image ${image}"
-          echo "Updating ${patch_file}"
+      - name: Apply manifest promotion changes
+        id: promote
+        run: |
+          set -euo pipefail
+          python3 /tmp/promote_manifest.py \
+            --environment "${{ inputs.environment }}" \
+            --app "${{ inputs.app }}" \
+            --digest "${{ inputs.release_digest }}" \
+            --attestation "audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json"
+          patch_file="$(jq -r '.patch_file' "audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json")"
+          echo "patch_file=${patch_file}" >> "$GITHUB_OUTPUT"
 
-          if [ ! -f "$patch_file" ]; then
-            echo "::error::Patch file not found for ${app} in ${env}: ${patch_file}"
+      - name: Verify promotion diff scope
+        run: |
+          set -euo pipefail
+          expected="${{ steps.promote.outputs.patch_file }}"
+          mapfile -t changed < <(git diff --name-only)
+          if [ "${#changed[@]}" -ne 1 ] || [ "${changed[0]}" != "$expected" ]; then
+            echo "::error::Promotion must change exactly ${expected}; actual changes: ${changed[*]:-none}"
             exit 1
           fi
-
-          yq -i '(.spec.template.spec.containers[] | select(.name == "'"$app"'") | .image) = "'"$image"'"' "$patch_file"
 
       - name: Create promotion pull request
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
@@ -86,26 +87,31 @@ jobs:
             - release_digest: `${{ inputs.release_digest }}`
             - promoted_by: `@${{ github.actor }}`
 
-      - name: Build promotion audit record
+      - name: Extend promotion audit record
         run: |
-          mkdir -p audit
-          cat > "audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json" <<JSON
-          {
-            "run_id": "${{ github.run_id }}",
-            "run_attempt": "${{ github.run_attempt }}",
-            "target_environment": "${{ inputs.environment }}",
-            "source_repository": "${{ inputs.source_repo }}",
-            "source_ref": "${{ inputs.source_ref }}",
-            "source_commit": "${{ inputs.source_commit }}",
-            "release_digest": "${{ inputs.release_digest }}",
-            "promoted_by": "${{ github.actor }}",
-            "promoted_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          JSON
+          set -euo pipefail
+          jq \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_attempt "${{ github.run_attempt }}" \
+            --arg source_repository "${{ inputs.source_repo }}" \
+            --arg source_ref "${{ inputs.source_ref }}" \
+            --arg source_commit "${{ inputs.source_commit }}" \
+            --arg promoted_by "${{ github.actor }}" \
+            '. + {
+              run_id: $run_id,
+              run_attempt: $run_attempt,
+              source_repository: $source_repository,
+              source_ref: $source_ref,
+              source_commit: $source_commit,
+              promoted_by: $promoted_by
+            }' "audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json" > audit/promotion.tmp
+          mv audit/promotion.tmp "audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json"
 
       - name: Upload audit artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
         with:
           name: promotion-audit-${{ inputs.environment }}-${{ github.run_id }}
           path: audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json
           if-no-files-found: error
+          retention-days: 90
+          compression-level: 6

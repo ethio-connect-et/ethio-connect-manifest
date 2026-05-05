@@ -1,0 +1,39 @@
+flowchart TD
+  subgraph SRC[Source repo: ethio-connect-et/ethio-connect]
+    DEV[Developer PR] --> SRC_CI[CI workflow\nbranch policy, lint, tests, build validation]
+    SRC_CI --> MERGE{Merge branch}
+    MERGE -->|testing| PUB_TEST[Container publish\nNx docker:build all apps]
+    MERGE -->|staging| PUB_STAGE[Container publish\nNx docker:build all apps]
+    MERGE -->|main| PUB_PROD[Container publish\nrelease/prod images]
+    PUB_TEST --> DIGEST[Resolve GHCR immutable digest\ndocker buildx imagetools inspect]
+    PUB_STAGE --> DIGEST
+    PUB_PROD --> DIGEST
+    DIGEST --> DISPATCH[repository_dispatch promote-image\napp + sha256 digest + target env\noptional source metadata]
+  end
+
+  subgraph MANIFEST[GitOps repo: ethio-connect-et/ethio-connect-manifest]
+    DISPATCH --> ACCEPT[Receive Source Promotion\nvalidate payload schema and app mapping]
+    ACCEPT --> CHECKOUT[Checkout target env branch\ntesting / staging / production]
+    CHECKOUT --> PATCH[Patch one overlay file only\nghcr.io/ethio-connect-et/app@sha256]
+    PATCH --> ATTEST[Upload promotion attestation artifact\n90-day retention]
+    PATCH --> PR[Open bot promotion PR\nbase = environment branch]
+    PR --> VALIDATE[Manifest Validation reusable workflow\nHelm lint, Kustomize render, kubeconform, conftest, image policy]
+    VALIDATE --> RENDER[Rendered manifest artifacts\nretained for audit/debug]
+    VALIDATE --> GATE[Promotion Gate\nscoped diff + rollout status]
+    GATE -->|production| CAB[GitHub environment approval\nproduction-change-control]
+    GATE -->|testing/staging| AUTO[Auto-merge when checks and statuses pass]
+    CAB --> AUTO
+    AUTO --> MERGED[Environment branch updated]
+  end
+
+  subgraph CLUSTER[Bare-metal Ubuntu Kubernetes platform]
+    MERGED --> ARGO[Argo CD watches manifest repo branches]
+    ARGO --> RANCHER[Rancher-managed cluster\nRBAC, projects, observability]
+    RANCHER --> K8S[Kubernetes workloads]
+    K8S --> DEPLOY[Deployments pull immutable GHCR digests]
+    DEPLOY --> HEALTH[Argo CD health/sync status\nRancher monitoring and alerts]
+    HEALTH --> ROLLBACK{Need rollback?}
+    ROLLBACK -->|yes| RBWF[Rollback Promotion workflow\nprevious-good digest PR]
+    RBWF --> VALIDATE
+    ROLLBACK -->|no| DONE[Release accepted]
+  end

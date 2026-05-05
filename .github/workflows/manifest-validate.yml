@@ -1,86 +1,45 @@
 name: Manifest Validation
 
 on:
+  workflow_call:
   pull_request:
     branches: [testing, staging, production]
   push:
     branches: [testing, staging, production]
 
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  HELM_CACHE_HOME: ${{ github.workspace }}/.cache/helm
+  HELM_CONFIG_HOME: ${{ github.workspace }}/.config/helm
+  HELM_DATA_HOME: ${{ github.workspace }}/.local/share/helm
+  KUBECONFORM_VERSION: v0.6.7
+  CONFTEST_VERSION: 0.59.0
+
 jobs:
   validate:
+    name: Validate rendered manifests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Checkout manifests
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
 
-      - name: Install Helm
-        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a
-
-      - uses: imranismail/setup-kustomize@53f941b41dca13ed61874bbc6b4b6e1562877530
-      - name: Kustomize build checks
-        run: |
-          kustomize build --enable-helm overlays/testing  >/tmp/testing.yaml
-          kustomize build --enable-helm overlays/staging  >/tmp/staging.yaml
-          kustomize build --enable-helm overlays/production >/tmp/production.yaml
-
-      - name: Enforce runtime image reference policy
-        shell: bash
-        run: python3 .github/scripts/validate_runtime_images.py
-
-      - name: Helm lint checks
-        run: |
-          helm lint charts/vendor-portal
-          helm lint charts/customer-portal
-          helm lint charts/central-hub
-          helm lint charts/shared-infrastructure
-
-      - name: Install kubeconform (pinned)
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION=v0.6.7
-          FILE=kubeconform-linux-amd64.tar.gz
-          URL="https://github.com/yannh/kubeconform/releases/download/${VERSION}/${FILE}"
-          EXPECTED_SHA256="95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73"
-          curl -fsSL -o "$FILE" "$URL"
-          echo "${EXPECTED_SHA256}  ${FILE}" | sha256sum -c -
-          tar -xzf "$FILE" kubeconform
-          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
-
-      - name: Schema validation (kubeconform)
-        run: kubeconform -strict -summary /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml
-
-      - name: Install conftest (pinned)
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION=0.59.0
-          FILE=conftest_${VERSION}_Linux_x86_64.tar.gz
-          URL="https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/${FILE}"
-          EXPECTED_SHA256="af879740a9b43aae21f928ed5d3571615c9d17b5d0551623a56d317812db0f98"
-          curl -fsSL -o "$FILE" "$URL"
-          echo "${EXPECTED_SHA256}  ${FILE}" | sha256sum -c -
-          tar -xzf "$FILE" conftest
-          sudo install -m 0755 conftest /usr/local/bin/conftest
-
-      - name: Policy checks (conftest)
-        run: |
-          # 'policies' directory must exist in the manifest repo; skip gracefully if absent
-          if [ -d policies ]; then
-            conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policies
-          else
-            echo "::warning::No 'policies' directory found; skipping conftest OPA checks."
-          fi
-
-  contract-validation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Restore validation tool cache
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: .ci-tools
+          key: ${{ runner.os }}-manifest-tools-kubeconform-${{ env.KUBECONFORM_VERSION }}-conftest-${{ env.CONFTEST_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-manifest-tools-
 
       - name: Install Helm
         uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a
@@ -88,29 +47,106 @@ jobs:
       - name: Install kustomize
         uses: imranismail/setup-kustomize@53f941b41dca13ed61874bbc6b4b6e1562877530
 
-      - name: Build manifests for contract validation
-        run: |
-          kustomize build --enable-helm overlays/testing  >/tmp/testing.yaml
-          kustomize build --enable-helm overlays/staging  >/tmp/staging.yaml
-          kustomize build --enable-helm overlays/production >/tmp/production.yaml
-
-      - name: Install conftest (pinned)
-        shell: bash
+      - name: Install kubeconform and conftest
         run: |
           set -euo pipefail
-          VERSION=0.59.0
-          FILE=conftest_${VERSION}_Linux_x86_64.tar.gz
-          URL="https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/${FILE}"
-          EXPECTED_SHA256="af879740a9b43aae21f928ed5d3571615c9d17b5d0551623a56d317812db0f98"
-          curl -fsSL -o "$FILE" "$URL"
-          echo "${EXPECTED_SHA256}  ${FILE}" | sha256sum -c -
-          tar -xzf "$FILE" conftest
-          sudo install -m 0755 conftest /usr/local/bin/conftest
-
-      - name: Replay promotion payload contract (dry-run)
-        run: |
-          if [ -d policies ]; then
-            conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policies
-          else
-            echo "::warning::No 'policies' directory found; skipping conftest OPA policy contract check."
+          mkdir -p .ci-tools
+          if [ ! -x .ci-tools/kubeconform ]; then
+            file="kubeconform-linux-amd64.tar.gz"
+            curl -fsSL -o "/tmp/${file}" "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/${file}"
+            tar -xzf "/tmp/${file}" -C .ci-tools kubeconform
           fi
+          if [ ! -x .ci-tools/conftest ]; then
+            file="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+            curl -fsSL -o "/tmp/${file}" "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/${file}"
+            tar -xzf "/tmp/${file}" -C .ci-tools conftest
+          fi
+          echo "${GITHUB_WORKSPACE}/.ci-tools" >> "$GITHUB_PATH"
+
+      - name: Render overlays with Helm through Kustomize
+        run: |
+          set -euo pipefail
+          mkdir -p rendered
+          for env in testing staging production; do
+            kustomize build --enable-helm "overlays/${env}" > "rendered/${env}.yaml"
+          done
+
+      - name: Upload rendered manifest artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: rendered-manifests-${{ github.run_id }}
+          path: rendered/*.yaml
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Enforce runtime image reference policy
+        run: |
+          set -euo pipefail
+          cp rendered/testing.yaml /tmp/testing.yaml
+          cp rendered/staging.yaml /tmp/staging.yaml
+          cp rendered/production.yaml /tmp/production.yaml
+          python3 .github/scripts/validate_runtime_images.py
+
+      - name: Helm lint checks
+        run: |
+          set -euo pipefail
+          helm lint charts/vendor-portal
+          helm lint charts/customer-portal
+          helm lint charts/central-hub
+          helm lint charts/shared-infrastructure
+
+      - name: Kubernetes schema validation with kubeconform
+        run: kubeconform -strict -summary rendered/testing.yaml rendered/staging.yaml rendered/production.yaml
+
+      - name: Policy checks with conftest
+        run: |
+          set -euo pipefail
+          if [ -d policies ]; then
+            conftest test rendered/testing.yaml rendered/staging.yaml rendered/production.yaml --policy policies
+          else
+            echo "::warning::No 'policies' directory found; skipping conftest OPA checks."
+          fi
+
+  contract-validation:
+    name: Validate source handoff contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout manifests
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 1
+
+      - name: Validate source dispatch samples against all mapped apps
+        run: |
+          set -euo pipefail
+          source_repo="ethio-connect-et/ethio-connect"
+          for env in testing staging production; do
+            source_ref="refs/heads/${env}"
+            [ "$env" = "production" ] && source_ref="refs/heads/main"
+            mapfile -t apps < <(find "overlays/${env}" -mindepth 2 -maxdepth 2 -name patch.yaml -print0 \
+              | xargs -0 awk '/image: ghcr.io\/ethio-connect-et\// { image=$2; sub(/^ghcr.io\/ethio-connect-et\//, "", image); sub(/[@:].*/, "", image); print image }' \
+              | sort -u)
+            if [ "${#apps[@]}" -eq 0 ]; then
+              echo "::error::No deployable image apps discovered for ${env}."
+              exit 1
+            fi
+            for app in "${apps[@]}"; do
+              event_file="/tmp/promote-${env}-${app}.json"
+              jq -n \
+                --arg action promote-image \
+                --arg app "$app" \
+                --arg digest "sha256:$(printf 'a%.0s' {1..64})" \
+                --arg env "$env" \
+                --arg source_repo "$source_repo" \
+                --arg source_ref "$source_ref" \
+                --arg source_commit "$(printf 'b%.0s' {1..40})" \
+                '{action:$action, client_payload:{app:$app,digest:$digest,env:$env,source_repo:$source_repo,source_ref:$source_ref,source_commit:$source_commit}}' > "$event_file"
+              GITHUB_EVENT_PATH="$event_file" python3 .github/scripts/validate_promote_dispatch.py
+              python3 .github/scripts/promote_manifest.py --environment "$env" --app "$app" --digest "sha256:$(printf 'c%.0s' {1..64})" --attestation "/tmp/${env}-${app}-attestation.json" >/dev/null
+              git checkout -- "overlays/${env}"
+            done
+          done

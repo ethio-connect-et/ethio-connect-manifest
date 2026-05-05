@@ -11,8 +11,6 @@ if [[ -z "$REPO" ]]; then
   REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 fi
 
-required_contexts='["Promotion Gate / verify-promotion","Manifest Promotion / promote"]'
-
 for branch in testing staging production; do
   echo "Configuring branch protection for $branch"
   gh api \
@@ -20,8 +18,9 @@ for branch in testing staging production; do
     -H "Accept: application/vnd.github+json" \
     "/repos/${REPO}/branches/${branch}/protection" \
     -f required_status_checks.strict=true \
-    -F required_status_checks.contexts[]="Promotion Gate / verify-promotion" \
-    -F required_status_checks.contexts[]="Manifest Promotion / promote" \
+    -F required_status_checks.contexts[]="Manifest Validation / Validate rendered manifests" \
+    -F required_status_checks.contexts[]="Manifest Validation / Validate source handoff contract" \
+    -F required_status_checks.contexts[]="Promotion Gate / Verify promotion governance" \
     -f enforce_admins=true \
     -f required_pull_request_reviews.dismiss_stale_reviews=true \
     -f required_pull_request_reviews.required_approving_review_count=1 \
