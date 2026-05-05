@@ -1,20 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+helmGlobals:
+  chartHome: ../../charts
 helmCharts:
   - name: vendor-portal
-    path: ../../charts/vendor-portal
     releaseName: vendor-portal
     valuesFile: values/vendor-portal.yaml
   - name: customer-portal
-    path: ../../charts/customer-portal
     releaseName: customer-portal
     valuesFile: values/customer-portal.yaml
   - name: central-hub
-    path: ../../charts/central-hub
     releaseName: central-hub
     valuesFile: values/central-hub.yaml
   - name: shared-infrastructure
-    path: ../../charts/shared-infrastructure
     releaseName: shared-infrastructure
     valuesFile: values/shared-infrastructure.yaml
 patches:

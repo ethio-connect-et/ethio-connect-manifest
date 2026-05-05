@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["event_type", "client_payload"],
+  "properties": {
+    "event_type": {"const": "promote-image"},
+    "client_payload": {
+      "type": "object",
+      "required": ["app","digest","env","source_repo","source_ref","source_commit","release_id","release_created_at","signed_metadata","attestation_bundle"],
+      "properties": {
+        "app": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "env": {"type": "string", "enum": ["testing", "staging", "production"]},
+        "source_repo": {"type": "string", "const": "ethio-connect-et/ethio-connect"},
+        "source_ref": {"type": "string", "pattern": "^refs/heads/(testing|staging|main)$"},
+        "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "release_id": {"type": "string", "pattern": "^[0-9]+$"},
+        "release_created_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T"},
+        "signed_metadata": {"type": "string", "minLength": 1},
+        "attestation_bundle": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

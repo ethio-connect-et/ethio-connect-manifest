@@ -2,8 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: customer-portal-api
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: customer-portal
@@ -24,8 +31,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: customer-portal-dashboard
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: customer-portal
