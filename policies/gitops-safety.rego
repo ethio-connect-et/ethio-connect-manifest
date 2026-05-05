@@ -36,11 +36,13 @@ deny[msg] {
 }
 
 has_rollout_policy_annotation(annotations) {
-  some key, _ in annotations
+  # Legacy Rego iteration: check if any key contains the string
+  annotations[key]
   contains(key, "/rollout-policy")
 }
 
 has_baremetal_annotation(annotations) {
-  some key, _ in annotations
+  # Legacy Rego iteration: check if any key contains the string
+  annotations[key]
   contains(key, "/baremetal-max-unavailable")
 }
