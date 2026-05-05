@@ -21,12 +21,42 @@ jobs:
           kustomize build --enable-helm overlays/staging >/tmp/staging.yaml
           kustomize build --enable-helm overlays/production >/tmp/production.yaml
 
-      - name: Enforce immutable/non-latest images
+      - name: Enforce production image hardening policy
         run: |
+          set -euo pipefail
           if rg -n 'image:\s+\S+:latest(\s|$)' /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; then
             echo "Found forbidden :latest image tags in rendered manifests" >&2
             exit 1
           fi
+          if rg -n 'image:\s+[^@[:space:]]+:[^@[:space:]]+' /tmp/production.yaml; then
+            echo "Production manifests must use digest-only image references (no mutable tags)." >&2
+            exit 1
+          fi
+          if rg -n 'image:\s+\S+@sha256:[a-f0-9]{64}' /tmp/production.yaml >/dev/null; then
+            echo "Digest-only image references detected for production."
+          else
+            echo "No digest-pinned images found in production manifests." >&2
+            exit 1
+          fi
+
+      - name: Enforce bare-metal rollout annotations and limits
+        run: |
+          set -euo pipefail
+          for f in /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; do
+            env_name="$(basename "$f" .yaml)"
+            if ! rg -n 'ethio-connect.io/rollout-policy:' "$f" >/dev/null; then
+              echo "Missing ethio-connect.io/rollout-policy annotation in ${env_name}" >&2
+              exit 1
+            fi
+            if ! rg -n 'ethio-connect.io/baremetal-max-unavailable:' "$f" >/dev/null; then
+              echo "Missing ethio-connect.io/baremetal-max-unavailable annotation in ${env_name}" >&2
+              exit 1
+            fi
+            if ! rg -n 'maxUnavailable:' "$f" >/dev/null; then
+              echo "Missing rollout maxUnavailable for ${env_name}" >&2
+              exit 1
+            fi
+          done
 
       - name: Install Helm
         uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a
