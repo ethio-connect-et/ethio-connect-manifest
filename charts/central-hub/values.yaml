@@ -1,9 +1,9 @@
 images:
   api:
-    repository: ghcr.io/ethioconnect/central-hub-api
+    repository: ghcr.io/ethio-connect-et/central-hub-api
     tag: main
     digest: ""
   dashboard:
-    repository: ghcr.io/ethioconnect/central-hub-dashboard
+    repository: ghcr.io/ethio-connect-et/central-hub-dashboard
     tag: main
     digest: ""

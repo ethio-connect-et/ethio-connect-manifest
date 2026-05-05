@@ -1,0 +1,100 @@
+name: Manifest Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [testing, staging, production]
+        required: true
+      app:
+        description: Name of the application to promote
+        type: string
+        required: true
+      source_repo:
+        description: Source repository
+        required: true
+      source_ref:
+        description: Source git ref
+        required: true
+      source_commit:
+        description: Source commit SHA
+        required: true
+      release_digest:
+        description: Build/release digest (sha256:...)
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: manifest-promotion-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import bot signing key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.MANIFEST_BOT_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.MANIFEST_BOT_GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Install yq
+        run: sudo snap install yq
+
+      - name: Apply manifest promotion changes
+        run: |
+          set -euo pipefail
+          env="${{ inputs.environment }}"
+          app="${{ inputs.app }}"
+          digest="${{ inputs.release_digest }}"
+          image="ghcr.io/ethio-connect-et/${app}@${digest}"
+          
+          patch_file="overlays/${env}/${app}/patch.yaml"
+          echo "Promotion to ${env} for app ${app} with image ${image}"
+          echo "Updating ${patch_file}"
+          
+          if [ ! -f "$patch_file" ]; then
+            echo "::error::Patch file not found for ${app} in ${env}: ${patch_file}"
+            exit 1
+          fi
+          
+          yq -i '(.spec.template.spec.containers[] | select(.name == "'"$app"'") | .image) = "'"$image"'"' "$patch_file"
+
+      - name: Commit signed manifest update
+        run: |
+          git config user.name "ethio-connect-manifest-bot"
+          git config user.email "manifest-bot@users.noreply.github.com"
+          git commit --allow-empty -S -m "chore(${{ inputs.environment }}): promote ${{ inputs.source_commit }}"
+          git push
+
+      - name: Build promotion audit record
+        run: |
+          mkdir -p audit
+          cat > "audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json" <<JSON
+          {
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "target_environment": "${{ inputs.environment }}",
+            "source_repository": "${{ inputs.source_repo }}",
+            "source_ref": "${{ inputs.source_ref }}",
+            "source_commit": "${{ inputs.source_commit }}",
+            "release_digest": "${{ inputs.release_digest }}",
+            "promoted_by": "${{ github.actor }}",
+            "promoted_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-audit-${{ inputs.environment }}-${{ github.run_id }}
+          path: audit/promotion-${{ inputs.environment }}-${{ github.run_id }}.json
+          if-no-files-found: error

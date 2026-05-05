@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: customer-portal-api
-          image: ghcr.io/ethioconnect/customer-portal-api@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          image: ghcr.io/ethio-connect-et/customer-portal-api@sha256:2222222222222222222222222222222222222222222222222222222222222222
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,4 +18,4 @@ spec:
     spec:
       containers:
         - name: customer-portal-dashboard
-          image: ghcr.io/ethioconnect/customer-portal-dashboard@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          image: ghcr.io/ethio-connect-et/customer-portal-dashboard@sha256:2222222222222222222222222222222222222222222222222222222222222222
