@@ -11,7 +11,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Validate payload
         env:
@@ -37,7 +37,7 @@ jobs:
           sed -i -E "s#image: .*#image: ${IMAGE}#" "$FILE"
 
       - name: Create promotion pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(${{ github.event.client_payload.env }}): promote ${{ github.event.client_payload.app }}@${{ github.event.client_payload.digest }}"

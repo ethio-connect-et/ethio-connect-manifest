@@ -12,9 +12,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
-      - uses: imranismail/setup-kustomize@v2
+      - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
       - name: Kustomize build checks
         run: |
           kustomize build overlays/testing >/tmp/testing.yaml
@@ -22,7 +22,7 @@ jobs:
           kustomize build overlays/production >/tmp/production.yaml
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a
       - name: Helm lint checks
         run: |
           helm lint charts/vendor-portal
@@ -39,7 +39,7 @@ jobs:
 
       - name: Policy checks (conftest)
         run: |
-          curl -sSL -o conftest.tar.gz https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_$(uname -s)_$(uname -m).tar.gz
+          curl -sSL -o conftest.tar.gz "https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_$(uname -s)_$(uname -m).tar.gz"
           tar -xzf conftest.tar.gz conftest
           sudo mv conftest /usr/local/bin/conftest
           conftest test /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml --policy policy

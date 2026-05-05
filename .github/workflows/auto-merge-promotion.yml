@@ -14,7 +14,7 @@ jobs:
       contents: write
     steps:
       - name: Enable auto-merge (branch protection aware)
-        uses: peter-evans/enable-pull-request-automerge@v3
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash

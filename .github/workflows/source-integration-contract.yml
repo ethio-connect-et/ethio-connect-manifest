@@ -11,4 +11,4 @@ jobs:
         run: |
           echo 'Source repository must send repository_dispatch event with only:'
           echo '{"event_type":"promote-image","client_payload":{"app":"<app>","digest":"sha256:<64hex>","env":"testing|staging|production"}}'
-          echo 'Do not use broad git mutations such as `git add .` in source-repo automation.'
+          echo "Do not use broad git mutations such as 'git add .' in source-repo automation."
