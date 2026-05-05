@@ -2,8 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: keycloak
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: keycloak
@@ -22,8 +29,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: postgres
@@ -42,8 +56,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: redis
