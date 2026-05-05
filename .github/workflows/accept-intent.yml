@@ -1,0 +1,69 @@
+name: Accept Promotion Intent
+
+on:
+  repository_dispatch:
+    types: [promote-image]
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate payload schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/validate_promote_dispatch.py 
+
+      - name: Store Intent
+        env:
+          APP: ${{ github.event.client_payload.app }}
+          DIGEST: ${{ github.event.client_payload.digest }}
+          ENVIRONMENT: ${{ github.event.client_payload.env }}
+        run: |
+          set -euo pipefail
+          mkdir -p "intents/${ENVIRONMENT}"
+          
+          # Use hash for safe filename
+          SAFE_DIGEST="${DIGEST//sha256:/}"
+          INTENT_FILE="intents/${ENVIRONMENT}/${APP}-${SAFE_DIGEST}.json"
+          
+          jq -n \
+            --arg app "$APP" \
+            --arg digest "$DIGEST" \
+            --arg env "$ENVIRONMENT" \
+            --arg source_repo "${{ github.event.client_payload.source_repo }}" \
+            --arg source_ref "${{ github.event.client_payload.source_ref }}" \
+            --arg source_commit "${{ github.event.client_payload.source_commit }}" \
+            --arg release_id "${{ github.event.client_payload.release_id }}" \
+            --arg release_created_at "${{ github.event.client_payload.release_created_at }}" \
+            '{
+              app: $app,
+              digest: $digest,
+              env: $env,
+              source_repo: $source_repo,
+              source_ref: $source_ref,
+              source_commit: $source_commit,
+              release_id: $release_id,
+              release_created_at: $release_created_at,
+              received_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }' > "$INTENT_FILE"
+            
+          git config user.name "ethio-connect-bot"
+          git config user.email "bot@ethio-connect.com"
+          git add "$INTENT_FILE"
+          git commit -m "chore(intent): receive promotion intent for ${APP} to ${ENVIRONMENT}"
+          
+          # Retry loop for push to handle concurrent intent writes
+          for _ in {1..5}; do
+            git pull --rebase origin main && git push origin main && exit 0
+            sleep $(( RANDOM % 5 + 1 ))
+          done
+          echo "::error::Failed to push intent after multiple attempts"
+          exit 1
