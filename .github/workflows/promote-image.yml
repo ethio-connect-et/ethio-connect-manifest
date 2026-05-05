@@ -3,6 +3,29 @@ name: Promote Image via PR
 on:
   repository_dispatch:
     types: [promote-image]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Application name from repository_dispatch payload
+        required: true
+        type: string
+      digest:
+        description: OCI image digest (sha256:...)
+        required: true
+        type: string
+      env:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - production
+      dry_run:
+        description: Validate payload and file mapping only (no PR)
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   promote:
@@ -10,45 +33,94 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      APP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.app || github.event.client_payload.app }}
+      DIGEST: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.digest || github.event.client_payload.digest }}
+      ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.env || github.event.client_payload.env }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - name: Validate payload
-        env:
-          APP: ${{ github.event.client_payload.app }}
-          DIGEST: ${{ github.event.client_payload.digest }}
-          ENVIRONMENT: ${{ github.event.client_payload.env }}
+      - name: Validate payload and discover supported apps
         run: |
+          set -euo pipefail
           test -n "$APP"
           test -n "$DIGEST"
           test -n "$ENVIRONMENT"
           echo "$ENVIRONMENT" | grep -E '^(testing|staging|production)$'
-          echo "$APP" | grep -E '^(vendor-portal|customer-portal|central-hub)$'
           echo "$DIGEST" | grep -E '^sha256:[a-f0-9]{64}$'
 
+          mapfile -t SUPPORTED_APPS < <(find "overlays/${ENVIRONMENT}" -mindepth 2 -maxdepth 2 -name patch.yaml -printf '%h\n' | xargs -n1 basename | sort -u)
+          if [ "${#SUPPORTED_APPS[@]}" -eq 0 ]; then
+            echo "No applications discovered from overlays/${ENVIRONMENT}/*/patch.yaml" >&2
+            exit 1
+          fi
+
+          if ! printf '%s\n' "${SUPPORTED_APPS[@]}" | grep -Fxq "$APP"; then
+            echo "Unsupported app '${APP}' for environment '${ENVIRONMENT}'." >&2
+            echo "Supported apps: ${SUPPORTED_APPS[*]}" >&2
+            echo "Expected app names map 1:1 to overlays/${ENVIRONMENT}/<app>/patch.yaml directories." >&2
+            exit 1
+          fi
+
       - name: Update manifest patch only
-        env:
-          APP: ${{ github.event.client_payload.app }}
-          DIGEST: ${{ github.event.client_payload.digest }}
-          ENVIRONMENT: ${{ github.event.client_payload.env }}
         run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/ethio-connect-et/${APP}@${DIGEST}"
           FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
-          IMAGE="ghcr.io/ethioconnect/${APP}@${DIGEST}"
-          sed -i -E "s#image: .*#image: ${IMAGE}#" "$FILE"
+
+          if [ ! -f "$FILE" ]; then
+            echo "Expected target file missing: $FILE" >&2
+            exit 1
+          fi
+
+          if ! grep -q "name: ${APP}" "$FILE"; then
+            echo "Could not find expected name entry for app '${APP}' in ${FILE}" >&2
+            exit 1
+          fi
+
+          awk -v app="$APP" -v image="$IMAGE" '
+            $0 ~ "name: " app { in_target=1 }
+            in_target && $0 ~ /^[[:space:]]*image:/ { sub(/image:.*/, "image: " image); in_target=0 }
+            { print }
+          ' "$FILE" > "$FILE.tmp"
+          mv "$FILE.tmp" "$FILE"
+
+      - name: Enforce path integrity
+        run: |
+          set -euo pipefail
+          FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
+          test -f "$FILE"
+          CHANGED_FILES="$(git diff --name-only)"
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No file changes produced for ${FILE}." >&2
+            exit 1
+          fi
+
+          if [ "$CHANGED_FILES" != "$FILE" ]; then
+            echo "Promotion must only change ${FILE}, but changed:" >&2
+            echo "$CHANGED_FILES" >&2
+            exit 1
+          fi
+
+      - name: Stop in dry-run mode
+        if: ${{ env.DRY_RUN == 'true' }}
+        run: echo "Dry-run mode enabled; skipping PR creation."
 
       - name: Create promotion pull request
+        if: ${{ env.DRY_RUN != 'true' }}
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore(${{ github.event.client_payload.env }}): promote ${{ github.event.client_payload.app }}@${{ github.event.client_payload.digest }}"
+          commit-message: "chore(${{ env.ENVIRONMENT }}): promote ${{ env.APP }}@${{ env.DIGEST }}"
           committer: Ethio Connect Bot <bot@ethio-connect.com>
           author: Ethio Connect Bot <bot@ethio-connect.com>
           signoff: true
-          branch: "bot/promote-${{ github.event.client_payload.env }}-${{ github.event.client_payload.app }}-${{ github.run_id }}"
-          base: ${{ github.event.client_payload.env }}
-          title: "Promote ${{ github.event.client_payload.app }} to ${{ github.event.client_payload.env }}"
+          branch: "bot/promote-${{ env.ENVIRONMENT }}-${{ env.APP }}-${{ github.run_id }}"
+          base: ${{ env.ENVIRONMENT }}
+          title: "Promote ${{ env.APP }} to ${{ env.ENVIRONMENT }}"
           body: |
             Automated promotion PR.
-            - app: `${{ github.event.client_payload.app }}`
-            - env: `${{ github.event.client_payload.env }}`
-            - digest: `${{ github.event.client_payload.digest }}`
+            - app: `${{ env.APP }}`
+            - env: `${{ env.ENVIRONMENT }}`
+            - digest: `${{ env.DIGEST }}`
