@@ -39,7 +39,10 @@ jobs:
               }
             }
 
-            const requiredStatuses = [];
+            const baseRef = context.payload.pull_request.base.ref;
+            const requiredStatuses = baseRef === 'production'
+              ? ['rollout/production-ready', 'approval/production-change-control']
+              : ['rollout/environment-ready'];
             for (const statusName of requiredStatuses) {
               const status = statuses.find(s => s.context === statusName);
               if (!status) core.setFailed(`Missing required status context: ${statusName}`);
@@ -47,7 +50,7 @@ jobs:
             }
 
       - name: Enable auto-merge (branch protection aware)
-        uses: peter-evans/enable-pull-request-automerge@v3
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d
         with:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
