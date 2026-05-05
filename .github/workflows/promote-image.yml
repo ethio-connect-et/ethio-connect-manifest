@@ -170,6 +170,80 @@ jobs:
             exit 1
           fi
 
+
+      - name: Verify image provenance against source commit
+        if: ${{ github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true' }}
+        env:
+          IMAGE_REF: ghcr.io/ethio-connect-et/${{ env.APP }}@${{ env.DIGEST }}
+        run: |
+          set -euo pipefail
+          test -n "$APP"
+          test -n "$DIGEST"
+
+          RAW_INSPECT="$(docker buildx imagetools inspect --format '{{json .}}' "$IMAGE_REF")"
+
+          get_label() {
+            local key="$1"
+            printf '%s' "$RAW_INSPECT" | jq -r --arg k "$key" '
+              [
+                .Manifest,
+                .Image,
+                .index,
+                .manifest,
+                .image,
+                (.Manifests[]? | .Manifest?),
+                (.manifests[]? | .manifest?),
+                (.manifests[]?),
+                (.Manifests[]?)
+              ]
+              | map(select(type == "object"))
+              | map(.annotations? // .config?.Labels? // .config?.labels? // {})
+              | map(select(type == "object" and has($k)))
+              | .[0][$k] // empty
+            '
+          }
+
+          REVISION="$(get_label 'org.opencontainers.image.revision')"
+          VERSION="$(get_label 'org.opencontainers.image.version')"
+
+          if [ -z "$REVISION" ]; then
+            echo "Missing OCI label org.opencontainers.image.revision for $IMAGE_REF" >&2
+            exit 1
+          fi
+
+          if [ "$REVISION" != "$SOURCE_COMMIT" ]; then
+            echo "Provenance mismatch for $IMAGE_REF" >&2
+            echo "expected source_commit: $SOURCE_COMMIT" >&2
+            echo "actual revision label: $REVISION" >&2
+            exit 1
+          fi
+
+          {
+            echo "## Image provenance checks"
+            echo "- image: $IMAGE_REF"
+            echo "- revision: $REVISION"
+            echo "- version: ${VERSION:-<missing>}"
+            echo "- source_commit: $SOURCE_COMMIT"
+            echo "- revision/source_commit match: pass"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install cosign
+        if: ${{ github.event_name == 'repository_dispatch' && env.DISPATCH_VALID == 'true' && env.ATTESTATION_BUNDLE != '' }}
+        uses: sigstore/cosign-installer@v3.8.1
+
+      - name: Optionally verify signed attestation with cosign
+        if: ${{ github.event_name == 'repository_dispatch' && env.DISPATCH_VALID == 'true' && env.ATTESTATION_BUNDLE != '' }}
+        env:
+          IMAGE_REF: ghcr.io/ethio-connect-et/${{ env.APP }}@${{ env.DIGEST }}
+        run: |
+          set -euo pipefail
+          TMP_BUNDLE="$(mktemp)"
+          printf '%s' "$ATTESTATION_BUNDLE" > "$TMP_BUNDLE"
+
+          cosign verify-attestation             --type slsaprovenance             --bundle "$TMP_BUNDLE"             "$IMAGE_REF" > /tmp/cosign-verify-output.json
+
+          echo "Signed attestation bundle verification passed for $IMAGE_REF"
+
       - name: Update manifest patch only (schema-aware)
         if: ${{ github.event_name != 'repository_dispatch' || env.DISPATCH_VALID == 'true' }}
         run: |
