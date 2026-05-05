@@ -3,17 +3,69 @@ name: Promotion Gate
 on:
   pull_request:
     branches: [testing, staging, production]
+    types: [opened, synchronize, reopened, ready_for_review]
 
-permissions:
-  contents: read
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   verify-promotion:
+    name: Verify promotion governance
+    if: startsWith(github.head_ref, 'bot/promote-') || startsWith(github.head_ref, 'bot/rollback-')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: read
+    environment: ${{ github.event.pull_request.base.ref == 'production' && 'production-change-control' || github.event.pull_request.base.ref }}
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Checkout manifests
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+
+      - name: Validate changed files are scoped to target overlay
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.ref }}"
+          git fetch --no-tags origin "$base"
+          mapfile -t changed < <(git diff --name-only "origin/${base}...HEAD")
+          [ "${#changed[@]}" -gt 0 ] || { echo "::error::Promotion PR has no file changes."; exit 1; }
+          for path in "${changed[@]}"; do
+            case "$path" in
+              overlays/${base}/*/patch.yaml|overlays/${base}/patch-*.yaml) ;;
+              *) echo "::error::Unexpected file in ${base} promotion: ${path}"; exit 1 ;;
+            esac
+          done
+
       - name: Validate promotion source metadata
         run: |
+          set -euo pipefail
           test -n "${{ github.event.pull_request.head.sha }}"
           test -n "${{ github.event.pull_request.base.ref }}"
-          echo "Promotion metadata validated for ${GITHUB_REF_NAME}."
+          echo "Promotion metadata validated for base ${{ github.event.pull_request.base.ref }}."
+
+      - name: Publish rollout readiness status
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const sha = context.payload.pull_request.head.sha;
+            const base = context.payload.pull_request.base.ref;
+            const statuses = base === 'production'
+              ? ['rollout/production-ready', 'approval/production-change-control']
+              : ['rollout/environment-ready'];
+            for (const contextName of statuses) {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha,
+                state: 'success',
+                context: contextName,
+                description: `Promotion gate passed for ${base}`,
+                target_url: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+              });
+            }
