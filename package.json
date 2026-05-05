@@ -1,0 +1,12 @@
+{
+  "name": "ethio-connect-manifest",
+  "version": "1.0.0",
+  "packageManager": "pnpm@10.20.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "keywords": [],
+  "devDependencies": {
+    "actionlint": "^2.0.6"
+  }
+}
