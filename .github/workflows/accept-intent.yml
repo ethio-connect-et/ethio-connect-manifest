@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           fetch-depth: 1
 
@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 .github/scripts/validate_promote_dispatch.py 
+          python3 .github/scripts/validate_promote_dispatch.py
 
       - name: Store Intent
         env:
@@ -29,11 +29,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "intents/${ENVIRONMENT}"
-          
+
           # Use hash for safe filename
           SAFE_DIGEST="${DIGEST//sha256:/}"
           INTENT_FILE="intents/${ENVIRONMENT}/${APP}-${SAFE_DIGEST}.json"
-          
+
           jq -n \
             --arg app "$APP" \
             --arg digest "$DIGEST" \
@@ -59,7 +59,7 @@ jobs:
           git config user.email "bot@ethio-connect.com"
           git add "$INTENT_FILE"
           git commit -m "chore(intent): receive promotion intent for ${APP} to ${ENVIRONMENT}"
-          
+
           # Retry loop for push to handle concurrent intent writes
           for _ in {1..5}; do
             git pull --rebase origin main && git push origin main && exit 0
