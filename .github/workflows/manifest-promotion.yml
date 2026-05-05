@@ -36,7 +36,7 @@ jobs:
       group: manifest-promotion-${{ inputs.environment }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
       - name: Import bot signing key
         uses: crazy-max/ghaction-import-gpg@v6
@@ -56,16 +56,16 @@ jobs:
           app="${{ inputs.app }}"
           digest="${{ inputs.release_digest }}"
           image="ghcr.io/ethio-connect-et/${app}@${digest}"
-          
+
           patch_file="overlays/${env}/${app}/patch.yaml"
           echo "Promotion to ${env} for app ${app} with image ${image}"
           echo "Updating ${patch_file}"
-          
+
           if [ ! -f "$patch_file" ]; then
             echo "::error::Patch file not found for ${app} in ${env}: ${patch_file}"
             exit 1
           fi
-          
+
           yq -i '(.spec.template.spec.containers[] | select(.name == "'"$app"'") | .image) = "'"$image"'"' "$patch_file"
 
       - name: Commit signed manifest update
