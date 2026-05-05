@@ -13,9 +13,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
-      - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
+      - uses: imranismail/setup-kustomize@f7351e0ce6b6fc22657b8356d7e07c843f2a2560
       - name: Kustomize build checks
         run: |
           kustomize build --enable-helm overlays/testing  >/tmp/testing.yaml
@@ -99,10 +99,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
       - name: Install kustomize
-        uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
+        uses: imranismail/setup-kustomize@f7351e0ce6b6fc22657b8356d7e07c843f2a2560
 
       - name: Build manifests for contract validation
         run: |

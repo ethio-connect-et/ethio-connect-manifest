@@ -38,7 +38,7 @@ jobs:
       PREV_DIGEST: ${{ github.event.inputs.previous_good_digest }}
       CHANGE_TICKET: ${{ github.event.inputs.change_ticket }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
       - name: Validate rollback contract input
         run: |
