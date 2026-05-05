@@ -2,13 +2,109 @@ name: Source Repo Integration Contract
 
 on:
   workflow_dispatch:
+  # Also validates on every PR and push so the manifest repo always knows
+  # the exact payload shape it must accept from ethio-connect-et/ethio-connect.
+  pull_request:
+    branches: [testing, staging, production]
+  push:
+    branches: [testing, staging, production]
 
 jobs:
   contract:
+    name: Validate Source Dispatch Contract
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - name: Expected payload contract
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 1
+
+      - name: Assert required overlay directories exist for all environments
+        shell: bash
         run: |
-          echo 'Source repository must send repository_dispatch event with only:'
-          echo '{"event_type":"promote-image","client_payload":{"app":"<app>","digest":"sha256:<64hex>","env":"testing|staging|production"}}'
-          echo "Do not use broad git mutations such as 'git add .' in source-repo automation."
+          set -euo pipefail
+          errors=0
+          for env in testing staging production; do
+            if [ ! -d "overlays/${env}" ]; then
+              echo "::error::Required overlay directory 'overlays/${env}' is missing."
+              errors=$((errors + 1))
+            fi
+            # Ensure at least one app directory with patch.yaml exists
+            count=$(find "overlays/${env}" -mindepth 2 -maxdepth 2 -name patch.yaml 2>/dev/null | wc -l)
+            if [ "$count" -eq 0 ]; then
+              echo "::error::No app patch.yaml files found under overlays/${env}/. Every deployed app must have a patch.yaml."
+              errors=$((errors + 1))
+            fi
+          done
+          [ "$errors" -eq 0 ] || exit 1
+
+      - name: Assert all production patch.yaml images use digest-only references
+        shell: bash
+        run: |
+          set -euo pipefail
+          errors=0
+          while IFS= read -r patch; do
+            # Check every image line in production patch files
+            while IFS= read -r line; do
+              if echo "$line" | grep -qE 'image:' && ! echo "$line" | grep -qE '@sha256:[a-f0-9]{64}'; then
+                echo "::error::Non-digest image reference in production patch ${patch}: ${line}"
+                errors=$((errors + 1))
+              fi
+            done < <(grep 'image:' "$patch")
+          done < <(find overlays/production -name patch.yaml)
+          [ "$errors" -eq 0 ] || exit 1
+
+      - name: Assert registry prefix is ghcr.io/ethio-connect-et in all patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          errors=0
+          while IFS= read -r patch; do
+            if grep -qE 'image:\s+ghcr\.io/(?!ethio-connect-et/)' "$patch" 2>/dev/null || \
+               grep -P 'image:\s+ghcr\.io/(?!ethio-connect-et/)' "$patch" 2>/dev/null; then
+              echo "::warning::Possible wrong GHCR registry prefix in ${patch}"
+            fi
+            # Hard check: no ethioconnect (without dash) prefix
+            if grep -qE 'ghcr\.io/ethioconnect/' "$patch"; then
+              echo "::error::Wrong GHCR org slug 'ethioconnect' (missing hyphens) in ${patch}. Must be 'ethio-connect-et'."
+              errors=$((errors + 1))
+            fi
+          done < <(find overlays -name patch.yaml)
+          [ "$errors" -eq 0 ] || exit 1
+
+      - name: Print expected dispatch payload contract (documentation)
+        run: |
+          echo "=== Source Repository Dispatch Contract ==="
+          echo ""
+          echo "Source repository: ethio-connect-et/ethio-connect"
+          echo "Target repository: ethio-connect-et/ethio-connect-manifest"
+          echo ""
+          echo "Event type: promote-image"
+          echo ""
+          echo "Required client_payload fields:"
+          cat <<'JSON'
+          {
+            "event_type": "promote-image",
+            "client_payload": {
+              "app":                "<app-name>",
+              "digest":             "sha256:<64hex>",
+              "env":                "testing|staging|production",
+              "source_repo":        "ethio-connect-et/ethio-connect",
+              "source_ref":         "refs/heads/main|refs/tags/v*",
+              "source_commit":      "<40hex-sha>",
+              "release_id":         "<github-run-id>",
+              "release_created_at": "2006-01-02T15:04:05Z",
+              "signed_metadata":    "<opaque-string>",
+              "attestation_bundle": "<json-blob-with-digest+commit+ref+release_id>"
+            }
+          }
+          JSON
+          echo ""
+          echo "Validation rules enforced by promote-image.yml:"
+          echo "  - source_repo must equal 'ethio-connect-et/ethio-connect'"
+          echo "  - actor must be 'ethio-connect-bot' OR sender.type must be 'Bot'"
+          echo "  - digest must match ^sha256:[a-f0-9]{64}$"
+          echo "  - env must be one of: testing | staging | production"
+          echo "  - app must map to overlays/<env>/<app>/patch.yaml"

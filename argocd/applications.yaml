@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ethio-connect-testing
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ethio-connect-et/ethio-connect-manifest.git
+    targetRevision: testing
+    path: overlays/testing
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ethio-connect-testing
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ethio-connect-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ethio-connect-et/ethio-connect-manifest.git
+    targetRevision: staging
+    path: overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ethio-connect-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ethio-connect-production
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ethio-connect-et/ethio-connect-manifest.git
+    targetRevision: production
+    path: overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ethio-connect-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

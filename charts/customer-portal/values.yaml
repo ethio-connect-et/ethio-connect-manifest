@@ -1,9 +1,9 @@
 images:
   api:
-    repository: ghcr.io/ethioconnect/customer-portal-api
+    repository: ghcr.io/ethio-connect-et/customer-portal-api
     tag: main
     digest: ""
   dashboard:
-    repository: ghcr.io/ethioconnect/customer-portal-dashboard
+    repository: ghcr.io/ethio-connect-et/customer-portal-dashboard
     tag: main
     digest: ""

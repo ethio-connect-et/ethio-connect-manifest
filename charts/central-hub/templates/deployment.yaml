@@ -2,8 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: central-hub-api
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: central-hub
@@ -24,8 +31,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: central-hub-dashboard
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: central-hub
