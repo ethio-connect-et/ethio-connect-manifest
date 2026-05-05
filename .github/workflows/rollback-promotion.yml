@@ -27,6 +27,7 @@ on:
 jobs:
   rollback:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       actions: write
@@ -62,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
-          IMAGE="ghcr.io/ethio-connect-et/${APP}@${PREV_DIGEST}"
+          export IMAGE="ghcr.io/ethio-connect-et/${APP}@${PREV_DIGEST}"
           COUNT="$(yq -r '.spec.template.spec.containers[] | select(.name == env(APP)) | .image' "$FILE" | wc -l | tr -d ' ')"
           [ "$COUNT" = "1" ] || { echo "Expected one mutable image field for rollback, found $COUNT" >&2; exit 1; }
           yq -i '(.spec.template.spec.containers[] | select(.name == env(APP)) | .image) = env(IMAGE)' "$FILE"
@@ -83,7 +84,9 @@ jobs:
           }
           JSON
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload rollback attestation
+        # Pinned to SHA for supply-chain security; corresponds to actions/upload-artifact@v4
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
         with:
           name: rollback-attestation-${{ env.ENVIRONMENT }}-${{ env.APP }}
           path: artifacts/rollback-attestation.json

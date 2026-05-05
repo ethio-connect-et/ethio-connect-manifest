@@ -27,9 +27,14 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: promote-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.env || github.event.client_payload.env }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.app || github.event.client_payload.app }}
+  cancel-in-progress: false
+
 jobs:
   promote:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -51,7 +56,7 @@ jobs:
       - name: Validate repository_dispatch sender/provenance policy
         if: ${{ github.event_name == 'repository_dispatch' }}
         env:
-          ALLOWED_SOURCE_REPO: ethio-connect-et/source-images
+          ALLOWED_SOURCE_REPO: ethio-connect-et/ethio-connect
           ALLOWED_ACTOR: ethio-connect-bot
           ALLOWED_GITHUB_APP_SLUG: ethio-connect-promoter
         run: |
@@ -75,9 +80,12 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ github.event.sender.type }}" = "Bot" ] && [ "${{ github.event.sender.login }}" != "$ALLOWED_GITHUB_APP_SLUG[bot]" ]; then
-            echo "Dispatch bot sender login '${{ github.event.sender.login }}' does not match expected app bot" >&2
-            exit 1
+          if [ "${{ github.event.sender.type }}" = "Bot" ]; then
+            EXPECTED_BOT_LOGIN="${ALLOWED_GITHUB_APP_SLUG}[bot]"
+            if [ "${{ github.event.sender.login }}" != "$EXPECTED_BOT_LOGIN" ]; then
+              echo "Dispatch bot sender login '${{ github.event.sender.login }}' does not match expected app bot '$EXPECTED_BOT_LOGIN'" >&2
+              exit 1
+            fi
           fi
 
           echo "$SOURCE_REF" | grep -E '^(refs/heads/main|refs/tags/v[0-9]+\.[0-9]+\.[0-9]+)$'
@@ -133,7 +141,7 @@ jobs:
       - name: Update manifest patch only (schema-aware)
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/ethio-connect-et/${APP}@${DIGEST}"
+          export IMAGE="ghcr.io/ethio-connect-et/${APP}@${DIGEST}"
           FILE="overlays/${ENVIRONMENT}/${APP}/patch.yaml"
           test -f "$FILE"
 
@@ -164,9 +172,15 @@ jobs:
 
       - name: Stop in dry-run mode
         if: ${{ env.DRY_RUN == 'true' }}
-        run: echo "Dry-run mode enabled; skipping PR creation."
+        run: |
+          echo "Dry-run mode enabled; skipping PR creation."
+          echo "Would promote ${APP} to ${ENVIRONMENT} with digest ${DIGEST}"
 
+      # NOTE: This step is explicitly gated by DRY_RUN so the step above has
+      # documented impact; the create-pull-request action is only reached in
+      # live (non-dry-run) runs.
       - name: Create promotion pull request
+        if: ${{ env.DRY_RUN != 'true' }}
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

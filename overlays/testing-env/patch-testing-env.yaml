@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: vendor-portal-api
-          image: ghcr.io/ethioconnect/vendor-portal-api:test
+          image: ghcr.io/ethio-connect-et/vendor-portal-api:test
           resources:
             limits:
               cpu: "250m"
