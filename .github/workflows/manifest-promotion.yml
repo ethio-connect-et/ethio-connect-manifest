@@ -70,15 +70,21 @@ jobs:
 
           yq -i '(.spec.template.spec.containers[] | select(.name == "'"$app"'") | .image) = "'"$image"'"' "$patch_file"
 
-      - name: Commit signed manifest update
-        run: |
-          set -euo pipefail
-          git config user.name "ethio-connect-manifest-bot"
-          git config user.email "manifest-bot@users.noreply.github.com"
-          git pull --rebase origin "${{ github.ref_name }}"
-          git add "overlays/${{ inputs.environment }}/${{ inputs.app }}/patch.yaml"
-          git commit --allow-empty -S -m "chore(${{ inputs.environment }}): promote ${{ inputs.source_commit }}"
-          git push origin "HEAD:${{ github.ref_name }}"
+      - name: Create promotion pull request
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(${{ inputs.environment }}): promote ${{ inputs.app }} to ${{ inputs.source_commit }}"
+          branch: "bot/promote-${{ inputs.environment }}-${{ inputs.app }}-${{ github.run_id }}"
+          base: ${{ inputs.environment }}
+          title: "Promote ${{ inputs.app }} to ${{ inputs.environment }}"
+          body: |
+            Automated promotion PR.
+            - app: `${{ inputs.app }}`
+            - environment: `${{ inputs.environment }}`
+            - source_commit: `${{ inputs.source_commit }}`
+            - release_digest: `${{ inputs.release_digest }}`
+            - promoted_by: `@${{ github.actor }}`
 
       - name: Build promotion audit record
         run: |

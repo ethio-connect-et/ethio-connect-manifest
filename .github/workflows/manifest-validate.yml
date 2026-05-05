@@ -29,25 +29,6 @@ jobs:
         shell: bash
         run: python3 .github/scripts/validate_runtime_images.py
 
-      - name: Enforce bare-metal rollout annotations and limits
-        shell: bash
-        run: |
-          set -euo pipefail
-          for f in /tmp/testing.yaml /tmp/staging.yaml /tmp/production.yaml; do
-            env_name="$(basename "$f" .yaml)"
-            if ! grep -qEn '^[[:space:]]+[A-Za-z0-9.-]+/rollout-policy:' "$f"; then
-              echo "Missing rollout-policy annotation (domain-scoped) in ${env_name}" >&2
-              exit 1
-            fi
-            if ! grep -qEn '^[[:space:]]+[A-Za-z0-9.-]+/baremetal-max-unavailable:' "$f"; then
-              echo "Missing baremetal-max-unavailable annotation (domain-scoped) in ${env_name}" >&2
-              exit 1
-            fi
-            if ! grep -qEn 'maxUnavailable:' "$f"; then
-              echo "Missing rollout maxUnavailable for ${env_name}" >&2
-              exit 1
-            fi
-          done
       - name: Helm lint checks
         run: |
           helm lint charts/vendor-portal

@@ -2,8 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vendor-portal-api
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: vendor-portal
@@ -24,8 +31,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vendor-portal-dashboard
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: vendor-portal
@@ -46,8 +60,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vendor-portal-public-dashboard
+  annotations:
+    ethio-connect.et/rollout-policy: "bare-metal-safe"
+    ethio-connect.et/baremetal-max-unavailable: "1"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: vendor-portal
