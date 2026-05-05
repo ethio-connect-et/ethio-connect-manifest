@@ -1,9 +1,17 @@
 package main
 
+# List of allowed image prefixes
+allowed_registries := [
+    "ghcr.io/ethio-connect-et/",
+    "quay.io/keycloak/",
+    "postgres",
+    "redis"
+]
+
 deny[msg] {
   input.kind == "Deployment"
   container := input.spec.template.spec.containers[_]
-  not startswith(container.image, "ghcr.io/ethio-connect-et/")
+  not is_allowed_registry(container.image)
   msg := sprintf("Container '%s' uses disallowed registry in image '%s'", [container.name, container.image])
 }
 
@@ -35,14 +43,17 @@ deny[msg] {
   msg := sprintf("Deployment '%s' is missing spec.strategy.rollingUpdate.maxUnavailable", [input.metadata.name])
 }
 
+is_allowed_registry(image) {
+  registry := allowed_registries[_]
+  startswith(image, registry)
+}
+
 has_rollout_policy_annotation(annotations) {
-  # Legacy Rego iteration: check if any key contains the string
   annotations[key]
   contains(key, "/rollout-policy")
 }
 
 has_baremetal_annotation(annotations) {
-  # Legacy Rego iteration: check if any key contains the string
   annotations[key]
   contains(key, "/baremetal-max-unavailable")
 }
